@@ -83,7 +83,6 @@ function getRelevantItem() {
 case $(uname) in
     Darwin)
       OS='OSX'
-      OS_ICON=$(print_icon 'APPLE_ICON')
       ;;
     CYGWIN_NT-*)
       OS='Windows'
@@ -91,35 +90,27 @@ case $(uname) in
       ;;
     FreeBSD)
       OS='BSD'
-      OS_ICON=$(print_icon 'FREEBSD_ICON')
       ;;
     OpenBSD)
       OS='BSD'
-      OS_ICON=$(print_icon 'FREEBSD_ICON')
       ;;
     DragonFly)
       OS='BSD'
-      OS_ICON=$(print_icon 'FREEBSD_ICON')
       ;;
     Linux)
       OS='Linux'
-      OS_ICON=$(print_icon 'LINUX_ICON')
-
       # Check if we're running on Android
       case $(uname -o 2>/dev/null) in
         Android)
           OS='Android'
-          OS_ICON=$(print_icon 'ANDROID_ICON')
           ;;
       esac
       ;;
     SunOS)
       OS='Solaris'
-      OS_ICON=$(print_icon 'SUNOS_ICON')
       ;;
     *)
       OS=''
-      OS_ICON=''
       ;;
 esac
 
@@ -148,6 +139,29 @@ segment_in_use() {
     fi
 }
 
+# Search for a segment in a list of segments.
+# Ignores the "_joined" suffix of segments.
+#   * $1: The segment to be searched for
+#   * $2: The array of segments to be searched in
+get_indices_of_segment() {
+  local segment="${1}"
+  local -a list
+  # Explicitly split the elements by whitespace.
+  list=(${=2})
+
+  local indices=()
+  for ((i=1;$#list[i];i++)); do
+    # Segments could be joined, but that is not an issue here.
+    # So we strip the "_joined" indicator away.
+    local currentSegment="${list[i]%_joined}"
+    if [[ "${currentSegment}" == "${segment}" ]]; then
+      indices+=("${i}")
+    fi
+  done
+
+  echo "${indices[@]}"
+}
+
 # Print a deprecation warning if an old segment is in use.
 # Takes the name of an associative array that contains the
 # deprecated segments as keys, the values contain the new
@@ -162,55 +176,6 @@ print_deprecation_warning() {
       print -P "%F{yellow}Warning!%f The '$key' segment is deprecated. Use '%F{blue}${raw_deprecated_segments[$key]}%f' instead. For more informations, have a look at the CHANGELOG.md."
     fi
   done
-}
-
-# A helper function to determine if a segment should be
-# joined or promoted to a full one.
-# Takes three arguments:
-#   * $1: The array index of the current segment
-#   * $2: The array index of the last printed segment
-#   * $3: The array of segments of the left or right prompt
-function segmentShouldBeJoined() {
-  local current_index=$1
-  local last_segment_index=$2
-  # Explicitly split the elements by whitespace.
-  local -a elements
-  elements=(${=3})
-
-  local current_segment=${elements[$current_index]}
-  local joined=false
-  if [[ ${current_segment[-7,-1]} == '_joined' ]]; then
-    joined=true
-    # promote segment to a full one, if the predecessing full segment
-    # was conditional. So this can only be the case for segments that
-    # are not our direct predecessor.
-    if (( $(($current_index - $last_segment_index)) > 1)); then
-      # Now we have to examine every previous segment, until we reach
-      # the last printed one (found by its index). This is relevant if
-      # all previous segments are joined. Then we want to join our
-      # segment as well.
-      local examined_index=$((current_index - 1))
-      while (( $examined_index > $last_segment_index )); do
-        local previous_segment=${elements[$examined_index]}
-        # If one of the examined segments is not joined, then we know
-        # that the current segment should not be joined, as the target
-        # segment is the wrong one.
-        if [[ ${previous_segment[-7,-1]} != '_joined' ]]; then
-          joined=false
-          break
-        fi
-        examined_index=$((examined_index - 1))
-      done
-    fi
-  fi
-
-  # Return 1 means error; return 0 means no error. So we have
-  # to invert $joined
-  if [[ "$joined" == "true" ]]; then
-    return 0
-  else
-    return 1
-  fi
 }
 
 # Given a directory path, truncate it according to the settings for

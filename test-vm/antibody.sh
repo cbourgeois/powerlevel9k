@@ -1,6 +1,6 @@
 #!/usr/bin/zsh
 # We need to run this script in ZSH, so that switching user works!
-NEW_USER=vagrant-omz
+NEW_USER=vagrant-antibody
 # Create User
 PASSWORD='$6$OgLg9v2Z$Db38Jr9inZG7y8BzL8kqFK23fF5jZ7FU1oiIBLFjNYR9XVX03fwQayMgA6Rm1rzLbXaf.gkZaTWhB9pv5XLq11'
 useradd -p $PASSWORD -g vagrant -s $(which zsh) -m $NEW_USER
@@ -13,24 +13,17 @@ chmod 440 /etc/sudoers.d/$NEW_USER
         #UID=$(id -u $NEW_USER)
         #EUID=$(id -u $NEW_USER)
         HOME=/home/$NEW_USER
-	SHELL=$(which zsh)
 
-        sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
-
-        mkdir -p ~/.oh-my-zsh/custom/themes
-        ln -s /vagrant_data ~/.oh-my-zsh/custom/themes/powerlevel9k
-
-        echo '
-print -P "%F{blue}INFO:%f Set your configuration in powerlevel9k.config in your powerlevel9k root folder for easier testing."
+        # Careful with other shell scripts lying around in your powerlevel9k-directory!
+        # If these scripts fail, antibody won't load powerlevel9k.
+        echo "
+print -P '%F{blue}INFO:%f Set your configuration in powerlevel9k.config in your powerlevel9k root folder for easier testing.'
 source /vagrant_data/powerlevel9k.config &>/dev/null
 
-export ZSH=$HOME/.oh-my-zsh
-ZSH_THEME="powerlevel9k/powerlevel9k"
-plugins=(git rake ruby)
+source <(antibody init)\n
+antibody bundle /vagrant_data/\n
+" > ~/.zshrc
 
-source $ZSH/oh-my-zsh.sh
-' > $HOME/.zshrc
-
-        # setup environment
-        /vagrant_data/test-vm-providers/setup-environment.sh
+        # install antibody
+        curl -s https://raw.githubusercontent.com/getantibody/installer/master/install | bash -s
 )

@@ -1,6 +1,6 @@
 #!/usr/bin/zsh
 # We need to run this script in ZSH, so that switching user works!
-NEW_USER=vagrant-antigen
+NEW_USER=vagrant-prezto-community
 # Create User
 PASSWORD='$6$OgLg9v2Z$Db38Jr9inZG7y8BzL8kqFK23fF5jZ7FU1oiIBLFjNYR9XVX03fwQayMgA6Rm1rzLbXaf.gkZaTWhB9pv5XLq11'
 useradd -p $PASSWORD -g vagrant -s $(which zsh) -m $NEW_USER
@@ -14,20 +14,18 @@ chmod 440 /etc/sudoers.d/$NEW_USER
         #EUID=$(id -u $NEW_USER)
         HOME=/home/$NEW_USER
 
+        git clone --recursive https://github.com/zsh-users/prezto.git "${ZDOTDIR:-$HOME}/.zprezto"
+
+        setopt EXTENDED_GLOB
+        for rcfile in "${ZDOTDIR:-$HOME}"/.zprezto/runcoms/^README.md(.N); do
+            ln -s "$rcfile" "${ZDOTDIR:-$HOME}/.${rcfile:t}"
+        done
+
+        ln -s /vagrant_data/powerlevel9k.zsh-theme ~/.zprezto/modules/prompt/functions/prompt_powerlevel9k_setup
+        sed -i "s/theme\ 'sorin'/theme\ 'powerlevel9k'/g" ~/.zpreztorc
+
         echo "
 print -P '%F{blue}INFO:%f Set your configuration in powerlevel9k.config in your powerlevel9k root folder for easier testing.'
 source /vagrant_data/powerlevel9k.config &>/dev/null
-
-source ~/antigen/antigen.zsh\n
-antigen theme /vagrant_data powerlevel9k --no-local-clone\n
-antigen apply
-" > ~/.zshrc
-
-        # install antigen
-        mkdir ~/antigen
-        curl -qL https://raw.githubusercontent.com/zsh-users/antigen/master/bin/antigen.zsh > ~/antigen/antigen.zsh
-        source ~/antigen/antigen.zsh
-
-        # setup environment
-        /vagrant_data/test-vm-providers/setup-environment.sh
+" >> ~/.zpreztorc
 )

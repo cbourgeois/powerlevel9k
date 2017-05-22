@@ -29,33 +29,48 @@ function tearDown() {
   p9k_clear_cache
 }
 
-function mockRust() {
-  echo 'rustc  0.4.1a-alpha'
-}
+function testViInsertModeWorks() {
+  export KEYMAP='viins'
 
-function testRust() {
-  alias rustc=mockRust
-
-  prompt_rust_version "left" "1" "false"
+  prompt_vi_mode "left" "1" "false"
   p9k_build_prompt_from_cache
 
-  assertEquals "%K{208} %F{black}0.4.1a-alpha %k%F{208}%f " "${PROMPT}"
+  assertEquals "%K{black} %F{blue}INSERT %k%F{black}%f " "${PROMPT}"
 
-  unalias rustc
+  unset KEYMAP
 }
 
-function testRustPrintsNothingIfRustIsNotAvailable() {
-  alias rustc=noRust
-  POWERLEVEL9K_CUSTOM_WORLD='echo world'
+function testViInsertModeWorksWhenLabeledAsMain() {
+  export KEYMAP='main'
 
-  prompt_custom "left" "2" "world" "false"
-  prompt_rust_version "left" "1" "false"
+  prompt_vi_mode "left" "1" "false"
   p9k_build_prompt_from_cache
 
-  assertEquals "%K{white} %F{black}world %k%F{white}%f " "${PROMPT}"
+  assertEquals "%K{black} %F{blue}INSERT %k%F{black}%f " "${PROMPT}"
 
-  unset POWERLEVEL9K_CUSTOM_WORLD
-  unalias rustc
+  unset KEYMAP
+}
+
+function testViCommandModeWorks() {
+  export KEYMAP='vicmd'
+
+  prompt_vi_mode "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{black} %F{white}NORMAL %k%F{black}%f " "${PROMPT}"
+
+  unset KEYMAP
+}
+
+function testViInsertModeStringIsCustomizable() {
+  export KEYMAP='viins'
+
+  prompt_vi_mode "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{black} %F{blue}INSERT %k%F{black}%f " "${PROMPT}"
+
+  unset KEYMAP
 }
 
 source shunit2/source/2.1/src/shunit2

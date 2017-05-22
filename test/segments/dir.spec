@@ -10,28 +10,53 @@ function setUp() {
   # Load Powerlevel9k
   source powerlevel9k.zsh-theme
 
+  # Initialize icon overrides
+  _powerlevel9kInitializeIconOverrides
+
+  # Precompile the Segment Separators here!
+  _POWERLEVEL9K_LEFT_SEGMENT_SEPARATOR="$(print_icon 'LEFT_SEGMENT_SEPARATOR')"
+  _POWERLEVEL9K_LEFT_SUBSEGMENT_SEPARATOR="$(print_icon 'LEFT_SUBSEGMENT_SEPARATOR')"
+  _POWERLEVEL9K_LEFT_SEGMENT_END_SEPARATOR="$(print_icon 'LEFT_SEGMENT_END_SEPARATOR')"
+  _POWERLEVEL9K_RIGHT_SEGMENT_SEPARATOR="$(print_icon 'RIGHT_SEGMENT_SEPARATOR')"
+  _POWERLEVEL9K_RIGHT_SUBSEGMENT_SEPARATOR="$(print_icon 'RIGHT_SUBSEGMENT_SEPARATOR')"
+
+  # Disable TRAP, so that we have more control how the segment is build,
+  # as shUnit does not work with async commands.
+  trap WINCH
+
   # Every test should at least use the dir segment
   POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(dir)
+
+  # Test specific
+  P9K_HOME=$(pwd)
+  FOLDER=/tmp/powerlevel9k-test/1/12/123/1234/12345/123456/1234567/12345678/123456789
+  mkdir -p $FOLDER
+  cd $FOLDER
 }
 
 function tearDown() {
+  # Go back to powerlevel9k folder
+  cd "${P9K_HOME}"
+  # Remove eventually created test-specific folder
+  rm -fr "${FOLDER}"
+  # At least remove test folder completely
+  rm -fr /tmp/powerlevel9k-test
+  unset FOLDER
+  unset P9K_HOME
   unset POWERLEVEL9K_LEFT_PROMPT_ELEMENTS
+
+  p9k_clear_cache
 }
 
 function testTruncateFoldersWorks() {
   POWERLEVEL9K_SHORTEN_DIR_LENGTH=2
   POWERLEVEL9K_SHORTEN_STRATEGY='truncate_folders'
 
-  FOLDER=/tmp/powerlevel9k-test/1/12/123/1234/12345/123456/1234567/12345678/123456789
-  mkdir -p $FOLDER
-  cd $FOLDER
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
 
-  assertEquals "%K{blue} %F{black}…/12345678/123456789 %k%F{blue}%f " "$(build_left_prompt)"
+  assertEquals "%K{blue} %F{black}…/12345678/123456789 %k%F{blue}%f " "${PROMPT}"
 
-  cd -
-  rm -fr /tmp/powerlevel9k-test
-
-  unset FOLDER
   unset POWERLEVEL9K_SHORTEN_DIR_LENGTH
   unset POWERLEVEL9K_SHORTEN_STRATEGY
 }
@@ -40,34 +65,144 @@ function testTruncateMiddleWorks() {
   POWERLEVEL9K_SHORTEN_DIR_LENGTH=2
   POWERLEVEL9K_SHORTEN_STRATEGY='truncate_middle'
 
-  FOLDER=/tmp/powerlevel9k-test/1/12/123/1234/12345/123456/1234567/12345678/123456789
-  mkdir -p $FOLDER
-  cd $FOLDER
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
 
-  assertEquals "%K{blue} %F{black}/tmp/po…st/1/12/123/1234/12…45/12…56/12…67/12…78/123456789 %k%F{blue}%f " "$(build_left_prompt)"
+  assertEquals "%K{blue} %F{black}/tmp/po…st/1/12/123/1234/12…45/12…56/12…67/12…78/123456789 %k%F{blue}%f " "${PROMPT}"
 
-  cd -
-  rm -fr /tmp/powerlevel9k-test
-
-  unset FOLDER
-  unset POWERLEVEL9K_LEFT_PROMPT_ELEMENTS
+  unset POWERLEVEL9K_SHORTEN_DIR_LENGTH
   unset POWERLEVEL9K_SHORTEN_STRATEGY
+}
+
+function testTruncateWithPackageNameWorks() {
+  cd /tmp/powerlevel9k-test
+  echo '
+{
+  "name": "My_Package"
+}
+' > package.json
+  # Unfortunately: The main folder must be a git repo..
+  git init &>/dev/null
+
+  # Go back to deeper folder
+  cd "${FOLDER}"
+
+  POWERLEVEL9K_SHORTEN_DIR_LENGTH=2
+  POWERLEVEL9K_SHORTEN_STRATEGY='truncate_with_package_name'
+
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache 0
+
+  assertEquals "%K{blue} %F{black}My_Package/1/12/123/12…/12…/12…/12…/12…/123456789 %k%F{blue}%f " "${PROMPT}"
+
+  unset POWERLEVEL9K_SHORTEN_STRATEGY
+  unset POWERLEVEL9K_SHORTEN_DIR_LENGTH
+}
+
+function testTruncateWithPackageNameInComplexPackageJsonWorks() {
+  # Skip test, as at the moment, we do not parse the right name.
+  # This is a feature done in another pull request.
+
+  # This test NEVER can do what we want it to, if neither `jq` nor
+  # `node` is installed (or mocked) beforehand. If it is mocked,
+  # the test gets pointless. I leave it here, until someone has a
+  # better idea.
+  startSkipping # Skip test
+
+  cd /tmp/powerlevel9k-test
+  echo '
+{
+  "author": {
+    "name": "Cookiemonster"
+  },
+  "name": "My_Package"
+}
+' > package.json
+  # Unfortunately: The main folder must be a git repo..
+  git init &>/dev/null
+
+  # Go back to deeper folder
+  cd "${FOLDER}"
+
+  POWERLEVEL9K_SHORTEN_DIR_LENGTH=2
+  POWERLEVEL9K_SHORTEN_STRATEGY='truncate_with_package_name'
+
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache 0
+
+  assertEquals "%K{blue} %F{black}My_Package/1/12/123/12…/12…/12…/12…/12…/123456789 %k%F{blue}%f " "${PROMPT}"
+
+  unset POWERLEVEL9K_SHORTEN_STRATEGY
+  unset POWERLEVEL9K_SHORTEN_DIR_LENGTH
+}
+
+function testTruncateWithPackageNameIfRepoIsSymlinkedInsideDeepFolder() {
+  # Unfortunately: The main folder must be a git repo..
+  git init &>/dev/null
+
+  echo '
+{
+  "name": "My_Package"
+}
+' > package.json
+
+  # Create a subdir inside the repo
+  mkdir -p asdfasdf/qwerqwer
+
+  cd /tmp/powerlevel9k-test
+  ln -s ${FOLDER} linked-repo
+
+  # Go to deep folder inside linked repo
+  cd linked-repo/asdfasdf/qwerqwer
+
+  POWERLEVEL9K_SHORTEN_DIR_LENGTH=2
+  POWERLEVEL9K_SHORTEN_STRATEGY='truncate_with_package_name'
+
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache 0
+
+  assertEquals "%K{blue} %F{black}My_Package/as…/qwerqwer %k%F{blue}%f " "${PROMPT}"
+
+  unset POWERLEVEL9K_SHORTEN_STRATEGY
+  unset POWERLEVEL9K_SHORTEN_DIR_LENGTH
+}
+
+function testTruncateWithPackageNameIfRepoIsSymlinkedInsideGitDir() {
+  # Unfortunately: The main folder must be a git repo..
+  git init &>/dev/null
+
+  echo '
+{
+  "name": "My_Package"
+}
+' > package.json
+
+  cd /tmp/powerlevel9k-test
+  ln -s ${FOLDER} linked-repo
+
+  cd linked-repo/.git/refs/heads
+
+  POWERLEVEL9K_SHORTEN_DIR_LENGTH=2
+  POWERLEVEL9K_SHORTEN_STRATEGY='truncate_with_package_name'
+
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache 0
+
+  assertEquals "%K{blue} %F{black}My_Package/.g…/re…/heads %k%F{blue}%f " "${PROMPT}"
+
+  unset POWERLEVEL9K_SHORTEN_STRATEGY
+  unset POWERLEVEL9K_SHORTEN_DIR_LENGTH
 }
 
 function testTruncationFromRightWorks() {
   POWERLEVEL9K_SHORTEN_DIR_LENGTH=2
   POWERLEVEL9K_SHORTEN_STRATEGY='truncate_from_right'
 
-  FOLDER=/tmp/powerlevel9k-test/1/12/123/1234/12345/123456/1234567/12345678/123456789
-  mkdir -p $FOLDER
-  cd $FOLDER
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
 
-  assertEquals "%K{blue} %F{black}/tmp/po…/1/12/123/12…/12…/12…/12…/12…/123456789 %k%F{blue}%f " "$(build_left_prompt)"
+  assertEquals "%K{blue} %F{black}/tmp/po…/1/12/123/12…/12…/12…/12…/12…/123456789 %k%F{blue}%f " "${PROMPT}"
 
-  cd -
-  rm -fr /tmp/powerlevel9k-test
-
-  unset FOLDER
   unset POWERLEVEL9K_SHORTEN_DIR_LENGTH
   unset POWERLEVEL9K_SHORTEN_STRATEGY
 }
@@ -82,7 +217,10 @@ function testTruncateWithFolderMarkerWorks() {
   # Setup folder marker
   touch $BASEFOLDER/1/12/.shorten_folder_marker
   cd $FOLDER
-  assertEquals "%K{blue} %F{black}/…/12/123/1234/12345/123456/1234567 %k%F{blue}%f " "$(build_left_prompt)"
+
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
+  assertEquals "%K{blue} %F{black}/…/12/123/1234/12345/123456/1234567 %k%F{blue}%f " "${PROMPT}"
 
   cd -
   rm -fr $BASEFOLDER
@@ -103,7 +241,10 @@ function testTruncateWithFolderMarkerWithChangedFolderMarker() {
   # Setup folder marker
   touch $BASEFOLDER/1/12/.xxx
   cd $FOLDER
-  assertEquals "%K{blue} %F{black}/…/12/123/1234/12345/123456/1234567 %k%F{blue}%f " "$(build_left_prompt)"
+
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
+  assertEquals "%K{blue} %F{black}/…/12/123/1234/12345/123456/1234567 %k%F{blue}%f " "${PROMPT}"
 
   cd -
   rm -fr $BASEFOLDER
@@ -114,117 +255,14 @@ function testTruncateWithFolderMarkerWithChangedFolderMarker() {
   unset POWERLEVEL9K_LEFT_PROMPT_ELEMENTS
 }
 
-function testTruncateWithPackageNameWorks() {
-  local p9kFolder=$(pwd)
-  local BASEFOLDER=/tmp/powerlevel9k-test
-  local FOLDER=$BASEFOLDER/1/12/123/1234/12345/123456/1234567/12345678/123456789
-  mkdir -p $FOLDER
-
-  cd /tmp/powerlevel9k-test
-  echo '
-{
-  "name": "My_Package"
-}
-' > package.json
-  # Unfortunately: The main folder must be a git repo..
-  git init &>/dev/null
-
-  # Go back to deeper folder
-  cd "${FOLDER}"
-
-  POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(dir)
-  POWERLEVEL9K_SHORTEN_DIR_LENGTH=2
-  POWERLEVEL9K_SHORTEN_STRATEGY='truncate_with_package_name'
-
-  assertEquals "%K{blue} %F{black}My_Package/1/12/123/12…/12…/12…/12…/12…/123456789 %k%F{blue}%f " "$(build_left_prompt)"
-
-  # Go back
-  cd $p9kFolder
-  rm -fr $BASEFOLDER
-  unset POWERLEVEL9K_LEFT_PROMPT_ELEMENTS
-  unset POWERLEVEL9K_SHORTEN_STRATEGY
-  unset POWERLEVEL9K_SHORTEN_DIR_LENGTH
-}
-
-function testTruncateWithPackageNameIfRepoIsSymlinkedInsideDeepFolder() {
-  local p9kFolder=$(pwd)
-  local BASEFOLDER=/tmp/powerlevel9k-test
-  local FOLDER=$BASEFOLDER/1/12/123/1234/12345/123456/1234567/12345678/123456789
-  mkdir -p $FOLDER
-  cd $FOLDER
-
-  # Unfortunately: The main folder must be a git repo..
-  git init &>/dev/null
-
-  echo '
-{
-  "name": "My_Package"
-}
-' > package.json
-
-  # Create a subdir inside the repo
-  mkdir -p asdfasdf/qwerqwer
-
-  cd $BASEFOLDER
-  ln -s ${FOLDER} linked-repo
-
-  # Go to deep folder inside linked repo
-  cd linked-repo/asdfasdf/qwerqwer
-
-  POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(dir)
-  POWERLEVEL9K_SHORTEN_DIR_LENGTH=2
-  POWERLEVEL9K_SHORTEN_STRATEGY='truncate_with_package_name'
-
-  assertEquals "%K{blue} %F{black}My_Package/as…/qwerqwer %k%F{blue}%f " "$(build_left_prompt)"
-
-  # Go back
-  cd $p9kFolder
-  rm -fr $BASEFOLDER
-  unset POWERLEVEL9K_LEFT_PROMPT_ELEMENTS
-  unset POWERLEVEL9K_SHORTEN_STRATEGY
-  unset POWERLEVEL9K_SHORTEN_DIR_LENGTH
-}
-
-function testTruncateWithPackageNameIfRepoIsSymlinkedInsideGitDir() {
-  local p9kFolder=$(pwd)
-  local BASEFOLDER=/tmp/powerlevel9k-test
-  local FOLDER=$BASEFOLDER/1/12/123/1234/12345/123456/1234567/12345678/123456789
-  mkdir -p $FOLDER
-  cd $FOLDER
-
-  # Unfortunately: The main folder must be a git repo..
-  git init &>/dev/null
-
-  echo '
-{
-  "name": "My_Package"
-}
-' > package.json
-
-  cd $BASEFOLDER
-  ln -s ${FOLDER} linked-repo
-
-  cd linked-repo/.git/refs/heads
-
-  POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(dir)
-  POWERLEVEL9K_SHORTEN_DIR_LENGTH=2
-  POWERLEVEL9K_SHORTEN_STRATEGY='truncate_with_package_name'
-
-  assertEquals "%K{blue} %F{black}My_Package/.g…/re…/heads %k%F{blue}%f " "$(build_left_prompt)"
-
-  # Go back
-  cd $p9kFolder
-  rm -fr $BASEFOLDER
-  unset POWERLEVEL9K_LEFT_PROMPT_ELEMENTS
-  unset POWERLEVEL9K_SHORTEN_STRATEGY
-  unset POWERLEVEL9K_SHORTEN_DIR_LENGTH
-}
-
 function testHomeFolderDetectionWorks() {
   POWERLEVEL9K_HOME_ICON='home-icon'
 
   cd ~
-  assertEquals "%K{blue} %F{black%}home-icon%f %F{black}~ %k%F{blue}%f " "$(build_left_prompt)"
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{blue} %F{black%}home-icon%f %F{black}~ %k%F{blue}%f " "${PROMPT}"
 
   cd -
   unset POWERLEVEL9K_HOME_ICON
@@ -236,7 +274,11 @@ function testHomeSubfolderDetectionWorks() {
   FOLDER=~/powerlevel9k-test
   mkdir $FOLDER
   cd $FOLDER
-  assertEquals "%K{blue} %F{black%}sub-icon%f %F{black}~/powerlevel9k-test %k%F{blue}%f " "$(build_left_prompt)"
+
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{blue} %F{black%}sub-icon%f %F{black}~/powerlevel9k-test %k%F{blue}%f " "${PROMPT}"
 
   cd -
   rm -fr $FOLDER
@@ -247,28 +289,25 @@ function testHomeSubfolderDetectionWorks() {
 function testOtherFolderDetectionWorks() {
   POWERLEVEL9K_FOLDER_ICON='folder-icon'
 
-  FOLDER=/tmp/powerlevel9k-test
-  mkdir $FOLDER
-  cd $FOLDER
-  assertEquals "%K{blue} %F{black%}folder-icon%f %F{black}/tmp/powerlevel9k-test %k%F{blue}%f " "$(build_left_prompt)"
+  cd /tmp
+
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{blue} %F{black%}folder-icon%f %F{black}/tmp %k%F{blue}%f " "${PROMPT}"
 
   cd -
-  rm -fr $FOLDER
-  unset FOLDER
   unset POWERLEVEL9K_FOLDER_ICON
 }
 
-function testChangingDirPathSeparator() {
-  POWERLEVEL9K_DIR_PATH_SEPARATOR='xXx'
-  local FOLDER="/tmp/powerlevel9k-test/1/2"
-  mkdir -p $FOLDER
-  cd $FOLDER
+function testPathSeparatorIsCustomizable() {
+  POWERLEVEL9K_DIR_PATH_SEPARATOR=' S '
 
-  assertEquals "%K{blue} %F{black}xXxtmpxXxpowerlevel9k-testxXx1xXx2 %k%F{blue}%f " "$(build_left_prompt)"
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
 
-  cd -
-  unset FOLDER
-  rm -fr /tmp/powerlevel9k-test
+  assertEquals "%K{blue} %F{black} S tmp S powerlevel9k-test S 1 S 12 S 123 S 1234 S 12345 S 123456 S 1234567 S 12345678 S 123456789 %k%F{blue}%f " "${PROMPT}"
+
   unset POWERLEVEL9K_DIR_PATH_SEPARATOR
 }
 
@@ -277,7 +316,10 @@ function testOmittingFirstCharacterWorks() {
   POWERLEVEL9K_FOLDER_ICON='folder-icon'
   cd /tmp
 
-  assertEquals "%K{blue} %F{black%}folder-icon%f %F{black}tmp %k%F{blue}%f " "$(build_left_prompt)"
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{blue} %F{black%}folder-icon%f %F{black}tmp %k%F{blue}%f " "${PROMPT}"
 
   cd -
   unset POWERLEVEL9K_FOLDER_ICON
@@ -291,7 +333,10 @@ function testOmittingFirstCharacterWorksWithChangingPathSeparator() {
   mkdir -p /tmp/powerlevel9k-test/1/2
   cd /tmp/powerlevel9k-test/1/2
 
-  assertEquals "%K{blue} %F{black%}folder-icon%f %F{black}tmpxXxpowerlevel9k-testxXx1xXx2 %k%F{blue}%f " "$(build_left_prompt)"
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{blue} %F{black%}folder-icon%f %F{black}tmpxXxpowerlevel9k-testxXx1xXx2 %k%F{blue}%f " "${PROMPT}"
 
   cd -
   rm -fr /tmp/powerlevel9k-test
@@ -315,7 +360,10 @@ function testOmittingFirstCharacterWorksWithChangingPathSeparatorAndDefaultTrunc
   mkdir -p /tmp/powerlevel9k-test/1/2
   cd /tmp/powerlevel9k-test/1/2
 
-  assertEquals "%K{blue} %F{black}xXx1xXx2 %k%F{blue}%f " "$(build_left_prompt)"
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{blue} %F{black}xXx1xXx2 %k%F{blue}%f " "${PROMPT}"
 
   cd -
   rm -fr /tmp/powerlevel9k-test
@@ -333,7 +381,10 @@ function testOmittingFirstCharacterWorksWithChangingPathSeparatorAndMiddleTrunca
   mkdir -p /tmp/powerlevel9k-test/1/2
   cd /tmp/powerlevel9k-test/1/2
 
-  assertEquals "%K{blue} %F{black}tmpxXxpo…stxXx1xXx2 %k%F{blue}%f " "$(build_left_prompt)"
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{blue} %F{black}tmpxXxpo…stxXx1xXx2 %k%F{blue}%f " "${PROMPT}"
 
   cd -
   rm -fr /tmp/powerlevel9k-test
@@ -351,7 +402,10 @@ function testOmittingFirstCharacterWorksWithChangingPathSeparatorAndRightTruncat
   mkdir -p /tmp/powerlevel9k-test/1/2
   cd /tmp/powerlevel9k-test/1/2
 
-  assertEquals "%K{blue} %F{black}tmpxXxpo…xXx1xXx2 %k%F{blue}%f " "$(build_left_prompt)"
+  prompt_dir "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{blue} %F{black}tmpxXxpo…xXx1xXx2 %k%F{blue}%f " "${PROMPT}"
 
   cd -
   rm -fr /tmp/powerlevel9k-test

@@ -26,36 +26,34 @@ function setUp() {
 }
 
 function tearDown() {
-  p9k_clear_cache
+    p9k_clear_cache
 }
 
-function mockRust() {
-  echo 'rustc  0.4.1a-alpha'
+function testNodeVersionSegmentPrintsNothingWithoutNode() {
+    POWERLEVEL9K_CUSTOM_WORLD='echo world'
+    alias node="nonode 2>/dev/null"
+
+    prompt_custom "left" "2" "world" "false"
+    prompt_node_version "left" "1" "false"
+    p9k_build_prompt_from_cache
+
+    assertEquals "%K{white} %F{black}world %k%F{white}%f " "${PROMPT}"
+
+    unset POWERLEVEL9K_CUSTOM_WORLD
+    unalias node
 }
 
-function testRust() {
-  alias rustc=mockRust
+function testNodeVersionSegmentWorks() {
+    node() {
+        echo "v1.2.3"
+    }
 
-  prompt_rust_version "left" "1" "false"
-  p9k_build_prompt_from_cache
+    prompt_node_version "left" "1" "false"
+    p9k_build_prompt_from_cache
 
-  assertEquals "%K{208} %F{black}0.4.1a-alpha %k%F{208}%f " "${PROMPT}"
+    assertEquals "%K{green} %F{white%}⬢%f %F{white}1.2.3 %k%F{green}%f " "${PROMPT}"
 
-  unalias rustc
-}
-
-function testRustPrintsNothingIfRustIsNotAvailable() {
-  alias rustc=noRust
-  POWERLEVEL9K_CUSTOM_WORLD='echo world'
-
-  prompt_custom "left" "2" "world" "false"
-  prompt_rust_version "left" "1" "false"
-  p9k_build_prompt_from_cache
-
-  assertEquals "%K{white} %F{black}world %k%F{white}%f " "${PROMPT}"
-
-  unset POWERLEVEL9K_CUSTOM_WORLD
-  unalias rustc
+    unfunction node
 }
 
 source shunit2/source/2.1/src/shunit2

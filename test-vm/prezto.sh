@@ -24,6 +24,11 @@ chmod 440 /etc/sudoers.d/$NEW_USER
         ln -s /vagrant_data/powerlevel9k.zsh-theme ~/.zprezto/modules/prompt/functions/prompt_powerlevel9k_setup
         sed -i "s/theme\ 'sorin'/theme\ 'powerlevel9k'/g" ~/.zpreztorc
 
+        echo "
+print -P '%F{blue}INFO:%f Set your configuration in powerlevel9k.config in your powerlevel9k root folder for easier testing.'
+source /vagrant_data/powerlevel9k.config &>/dev/null
+" >> ~/.zpreztorc
+
         # setup environment
         /vagrant_data/test-vm-providers/setup-environment.sh
 )

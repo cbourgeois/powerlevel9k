@@ -29,33 +29,35 @@ function tearDown() {
   p9k_clear_cache
 }
 
-function mockRust() {
-  echo 'rustc  0.4.1a-alpha'
-}
-
-function testRust() {
-  alias rustc=mockRust
-
-  prompt_rust_version "left" "1" "false"
-  p9k_build_prompt_from_cache
-
-  assertEquals "%K{208} %F{black}0.4.1a-alpha %k%F{208}%f " "${PROMPT}"
-
-  unalias rustc
-}
-
-function testRustPrintsNothingIfRustIsNotAvailable() {
-  alias rustc=noRust
+function testPhpVersionSegmentPrintsNothingIfPhpIsNotAvailable() {
+  alias php="nophp"
   POWERLEVEL9K_CUSTOM_WORLD='echo world'
 
   prompt_custom "left" "2" "world" "false"
-  prompt_rust_version "left" "1" "false"
+  prompt_php_version "left" "1" "false"
   p9k_build_prompt_from_cache
 
   assertEquals "%K{white} %F{black}world %k%F{white}%f " "${PROMPT}"
 
   unset POWERLEVEL9K_CUSTOM_WORLD
-  unalias rustc
+  unalias php
+}
+
+function testPhpVersionSegmentWorks() {
+  alias php="echo 'PHP 5.6.27 (cli) (built: Oct 23 2016 11:47:58)
+Copyright (c) 1997-2016 The PHP Group
+Zend Engine v2.6.0, Copyright (c) 1998-2016 Zend Technologies
+'"
+  POWERLEVEL9K_CUSTOM_WORLD='echo world'
+
+  prompt_custom "left" "2" "world" "false"
+  prompt_php_version "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{013} %F{white}PHP 5.6.27 %K{white}%F{013} %F{black}world %k%F{white}%f " "${PROMPT}"
+
+  unset POWERLEVEL9K_CUSTOM_WORLD
+  unalias php
 }
 
 source shunit2/source/2.1/src/shunit2

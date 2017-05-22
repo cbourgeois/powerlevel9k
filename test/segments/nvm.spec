@@ -23,39 +23,68 @@ function setUp() {
   # Disable TRAP, so that we have more control how the segment is build,
   # as shUnit does not work with async commands.
   trap WINCH
+
+  P9K_HOME=$(pwd)
+  ### Test specific
+  # Create default folder and git init it.
+  FOLDER=/tmp/powerlevel9k-test/nvm-test
+  mkdir -p "${FOLDER}"
+  cd $FOLDER
 }
 
 function tearDown() {
+  # Go back to powerlevel9k folder
+  cd "${P9K_HOME}"
+  # Remove eventually created test-specific folder
+  rm -fr "${FOLDER}"
+  # At least remove test folder completely
+  rm -fr /tmp/powerlevel9k-test
   p9k_clear_cache
 }
 
-function mockRust() {
-  echo 'rustc  0.4.1a-alpha'
-}
+function testNvmSegmentPrintsNothingIfNvmIsNotAvailable() {
+  alias nvm=nonvm
 
-function testRust() {
-  alias rustc=mockRust
-
-  prompt_rust_version "left" "1" "false"
-  p9k_build_prompt_from_cache
-
-  assertEquals "%K{208} %F{black}0.4.1a-alpha %k%F{208}%f " "${PROMPT}"
-
-  unalias rustc
-}
-
-function testRustPrintsNothingIfRustIsNotAvailable() {
-  alias rustc=noRust
   POWERLEVEL9K_CUSTOM_WORLD='echo world'
 
   prompt_custom "left" "2" "world" "false"
-  prompt_rust_version "left" "1" "false"
+  prompt_nvm "left" "1" "false"
   p9k_build_prompt_from_cache
 
   assertEquals "%K{white} %F{black}world %k%F{white}%f " "${PROMPT}"
 
   unset POWERLEVEL9K_CUSTOM_WORLD
-  unalias rustc
+  unalias nvm
+}
+
+function testNvmSegmentWorksWithoutHavingADefaultAlias() {
+  nvm() { echo 'v4.6.0'; }
+
+  prompt_nvm "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{green} %F{011%}⬢%f %F{011}4.6.0 %k%F{green}%f " "${PROMPT}"
+
+  unfunction nvm
+}
+
+function testNvmSegmentPrintsNothingWhenOnDefaultVersion() {
+  nvm() { echo 'v4.6.0'; }
+
+  export NVM_DIR="${FOLDER}"
+  mkdir alias
+  echo 'v4.6.0' > alias/default
+  POWERLEVEL9K_CUSTOM_WORLD='echo world'
+
+  prompt_custom "left" "2" "world" "false"
+  prompt_nvm "left" "1" "false"
+  p9k_build_prompt_from_cache
+
+  assertEquals "%K{white} %F{black}world %k%F{white}%f " "${PROMPT}"
+
+  unfunction nvm
+  unset POWERLEVEL9K_CUSTOM_WORLD
+  unset NVM_DIR
 }
 
 source shunit2/source/2.1/src/shunit2

@@ -20,6 +20,10 @@
 #zstyle ':vcs_info:*+*:*' debug true
 #set -o xtrace
 
+################################################################
+# Load our functions
+################################################################
+
 # Try to set the installation path
 if [[ -n "$POWERLEVEL9K_INSTALLATION_PATH" ]]; then
   # If an installation path was set manually,
@@ -100,23 +104,10 @@ fi
 
 ################################################################
 # Prompt Segment Constructors
-#
-# Methodology behind user-defined variables overwriting colors:
-#     The first parameter to the segment constructors is the calling function's
-#     name. From this function name, we strip the "prompt_"-prefix and
-#     uppercase it. This is then prefixed with "POWERLEVEL9K_" and suffixed
-#     with either "_BACKGROUND" or "_FOREGROUND", thus giving us the variable
-#     name. So each new segment is user-overwritten by a variable following
-#     this naming convention.
 ################################################################
 
-# The `CURRENT_BG` variable is used to remember what the last BG color used was
-# when building the left-hand prompt. Because the RPROMPT is created from
-# right-left but reads the opposite, this isn't necessary for the other side.
-CURRENT_BG='NONE'
-
 # Begin a left prompt segment
-# Takes four arguments:
+# Takes eight arguments:
 #   * $1: Name of the function that was originally invoked (mandatory).
 #         Necessary, to make the dynamic color-overwrite mechanism work.
 #   * $2: The array index of the current segment
@@ -124,89 +115,67 @@ CURRENT_BG='NONE'
 #   * $4: Foreground color
 #   * $5: The segment content
 #   * $6: An identifying icon (must be a key of the icons array)
+#   * $7: Last segments background color
+#   * $8: Boolean - If the segment should be joined or not
 # The latter three can be omitted,
 set_default last_left_element_index 1
 set_default POWERLEVEL9K_WHITESPACE_BETWEEN_LEFT_SEGMENTS " "
 left_prompt_segment() {
-  local current_index=$2
-  # Check if the segment should be joined with the previous one
-  local joined
-  segmentShouldBeJoined $current_index $last_left_element_index "$POWERLEVEL9K_LEFT_PROMPT_ELEMENTS" && joined=true || joined=false
+  local current_index="${2}"
+  local joined="${8}"
 
-  # Overwrite given background-color by user defined variable for this segment.
-  local BACKGROUND_USER_VARIABLE=POWERLEVEL9K_${(U)1#prompt_}_BACKGROUND
-  local BG_COLOR_MODIFIER=${(P)BACKGROUND_USER_VARIABLE}
-  [[ -n $BG_COLOR_MODIFIER ]] && 3="$BG_COLOR_MODIFIER"
-
-  # Overwrite given foreground-color by user defined variable for this segment.
-  local FOREGROUND_USER_VARIABLE=POWERLEVEL9K_${(U)1#prompt_}_FOREGROUND
-  local FG_COLOR_MODIFIER=${(P)FOREGROUND_USER_VARIABLE}
-  [[ -n $FG_COLOR_MODIFIER ]] && 4="$FG_COLOR_MODIFIER"
+  local BACKGROUND_OF_LAST_SEGMENT="${7}"
 
   local bg fg
-  [[ -n "$3" ]] && bg="%K{$3}" || bg="%k"
-  [[ -n "$4" ]] && fg="%F{$4}" || fg="%f"
+  [[ -n "${3}" ]] && bg="%K{$3}" || bg="%k"
+  [[ -n "${4}" ]] && fg="%F{$4}" || fg="%f"
 
-  if [[ $CURRENT_BG != 'NONE' ]] && ! isSameColor "$3" "$CURRENT_BG"; then
-    echo -n "$bg%F{$CURRENT_BG}"
-    if [[ $joined == false ]]; then
+  if [[ "${BACKGROUND_OF_LAST_SEGMENT}" != 'NONE' ]] && ! isSameColor "${3}" "${BACKGROUND_OF_LAST_SEGMENT}"; then
+    echo -n "${bg}%F{$BACKGROUND_OF_LAST_SEGMENT}"
+    if [[ "${joined}" == "false" ]]; then
       # Middle segment
-      echo -n "$(print_icon 'LEFT_SEGMENT_SEPARATOR')$POWERLEVEL9K_WHITESPACE_BETWEEN_LEFT_SEGMENTS"
+      echo -n "${_POWERLEVEL9K_LEFT_SEGMENT_SEPARATOR}${POWERLEVEL9K_WHITESPACE_BETWEEN_LEFT_SEGMENTS}"
     fi
-  elif isSameColor "$CURRENT_BG" "$3"; then
+  elif isSameColor "${BACKGROUND_OF_LAST_SEGMENT}" "${3}"; then
     # Middle segment with same color as previous segment
     # We take the current foreground color as color for our
     # subsegment (or the default color). This should have
     # enough contrast.
     local complement
-    [[ -n "$4" ]] && complement="$4" || complement=$DEFAULT_COLOR
-    echo -n "$bg%F{$complement}"
-    if [[ $joined == false ]]; then
-      echo -n "$(print_icon 'LEFT_SUBSEGMENT_SEPARATOR')$POWERLEVEL9K_WHITESPACE_BETWEEN_LEFT_SEGMENTS"
+    [[ -n "${4}" ]] && complement="${4}" || complement="${DEFAULT_COLOR}"
+    echo -n "${bg}%F{$complement}"
+    if [[ ${joined} == false ]]; then
+      echo -n "${_POWERLEVEL9K_LEFT_SUBSEGMENT_SEPARATOR}${POWERLEVEL9K_WHITESPACE_BETWEEN_LEFT_SEGMENTS}"
     fi
   else
     # First segment
-    echo -n "${bg}$POWERLEVEL9K_WHITESPACE_BETWEEN_LEFT_SEGMENTS"
-  fi
-
-  local visual_identifier
-  if [[ -n $6 ]]; then
-    visual_identifier="$(print_icon $6)"
-    if [[ -n "$visual_identifier" ]]; then
-      # Allow users to overwrite the color for the visual identifier only.
-      local visual_identifier_color_variable=POWERLEVEL9K_${(U)1#prompt_}_VISUAL_IDENTIFIER_COLOR
-      set_default $visual_identifier_color_variable $4
-      visual_identifier="%F{${(P)visual_identifier_color_variable}%}$visual_identifier%f"
-      # Add an whitespace if we print more than just the visual identifier
-      [[ -n "$5" ]] && visual_identifier="$visual_identifier "
-    fi
+    echo -n "${bg}${POWERLEVEL9K_WHITESPACE_BETWEEN_LEFT_SEGMENTS}"
   fi
 
   # Print the visual identifier
-  echo -n "${visual_identifier}"
-  # Print the content of the segment, if there is any
-  [[ -n "$5" ]] && echo -n "${fg}${5}"
+  echo -n "${6}"
+  # Print the content of the segment
+  echo -n "${fg}${5}"
   echo -n "${POWERLEVEL9K_WHITESPACE_BETWEEN_LEFT_SEGMENTS}"
 
-  CURRENT_BG=$3
-  last_left_element_index=$current_index
+  BACKGROUND_OF_LAST_SEGMENT="${3}"
+  last_left_element_index="${current_index}"
 }
 
 # End the left prompt, closes the final segment.
+#   * $1: Last segments background color
 left_prompt_end() {
-  if [[ -n $CURRENT_BG ]]; then
-    echo -n "%k%F{$CURRENT_BG}$(print_icon 'LEFT_SEGMENT_SEPARATOR')"
+  local BACKGROUND_OF_LAST_SEGMENT="${1}"
+  if [[ -n "${BACKGROUND_OF_LAST_SEGMENT}" ]]; then
+    echo -n "%k%F{$BACKGROUND_OF_LAST_SEGMENT}${_POWERLEVEL9K_LEFT_SEGMENT_SEPARATOR}"
   else
     echo -n "%k"
   fi
-  echo -n "%f$(print_icon 'LEFT_SEGMENT_END_SEPARATOR')"
-  CURRENT_BG=''
+  echo -n "%f${_POWERLEVEL9K_LEFT_SEGMENT_END_SEPARATOR}"
 }
 
-CURRENT_RIGHT_BG='NONE'
-
 # Begin a right prompt segment
-# Takes four arguments:
+# Takes eight arguments:
 #   * $1: Name of the function that was originally invoked (mandatory).
 #         Necessary, to make the dynamic color-overwrite mechanism work.
 #   * $2: The array index of the current segment
@@ -214,140 +183,132 @@ CURRENT_RIGHT_BG='NONE'
 #   * $4: Foreground color
 #   * $5: The segment content
 #   * $6: An identifying icon (must be a key of the icons array)
+#   * $7: Last segments background color
+#   * $8: Boolean - If the segment should be joined or not
 # No ending for the right prompt segment is needed (unlike the left prompt, above).
 set_default last_right_element_index 1
 set_default POWERLEVEL9K_WHITESPACE_BETWEEN_RIGHT_SEGMENTS " "
 right_prompt_segment() {
-  local current_index=$2
-
-  # Check if the segment should be joined with the previous one
-  local joined
-  segmentShouldBeJoined $current_index $last_right_element_index "$POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS" && joined=true || joined=false
-
-  # Overwrite given background-color by user defined variable for this segment.
-  local BACKGROUND_USER_VARIABLE=POWERLEVEL9K_${(U)1#prompt_}_BACKGROUND
-  local BG_COLOR_MODIFIER=${(P)BACKGROUND_USER_VARIABLE}
-  [[ -n $BG_COLOR_MODIFIER ]] && 3="$BG_COLOR_MODIFIER"
-
-  # Overwrite given foreground-color by user defined variable for this segment.
-  local FOREGROUND_USER_VARIABLE=POWERLEVEL9K_${(U)1#prompt_}_FOREGROUND
-  local FG_COLOR_MODIFIER=${(P)FOREGROUND_USER_VARIABLE}
-  [[ -n $FG_COLOR_MODIFIER ]] && 4="$FG_COLOR_MODIFIER"
+  local current_index="${2}"
+  local CURRENT_RIGHT_BG="${7}"
+  local joined="${8}"
 
   local bg fg
-  [[ -n "$3" ]] && bg="%K{$3}" || bg="%k"
-  [[ -n "$4" ]] && fg="%F{$4}" || fg="%f"
+  [[ -n "${3}" ]] && bg="%K{$3}" || bg="%k"
+  [[ -n "${4}" ]] && fg="%F{$4}" || fg="%f"
 
   # If CURRENT_RIGHT_BG is "NONE", we are the first right segment.
-  if [[ $joined == false ]] || [[ "$CURRENT_RIGHT_BG" == "NONE" ]]; then
-    if isSameColor "$CURRENT_RIGHT_BG" "$3"; then
+  if [[ "${joined}" == "false" ]] || [[ "${CURRENT_RIGHT_BG}" == "NONE" ]]; then
+    if isSameColor "${CURRENT_RIGHT_BG}" "${3}"; then
       # Middle segment with same color as previous segment
       # We take the current foreground color as color for our
       # subsegment (or the default color). This should have
       # enough contrast.
       local complement
-      [[ -n "$4" ]] && complement="$4" || complement=$DEFAULT_COLOR
-      echo -n "%F{$complement}$(print_icon 'RIGHT_SUBSEGMENT_SEPARATOR')%f"
+      [[ -n "${4}" ]] && complement="${4}" || complement=$DEFAULT_COLOR
+      echo -n "%F{$complement}${_POWERLEVEL9K_RIGHT_SUBSEGMENT_SEPARATOR}%f"
     else
-      echo -n "%F{$3}$(print_icon 'RIGHT_SEGMENT_SEPARATOR')%f"
-    fi
-  fi
-
-  local visual_identifier
-  if [[ -n "$6" ]]; then
-    visual_identifier="$(print_icon $6)"
-    if [[ -n "$visual_identifier" ]]; then
-      # Allow users to overwrite the color for the visual identifier only.
-      local visual_identifier_color_variable=POWERLEVEL9K_${(U)1#prompt_}_VISUAL_IDENTIFIER_COLOR
-      set_default $visual_identifier_color_variable $4
-      visual_identifier="%F{${(P)visual_identifier_color_variable}%}$visual_identifier%f"
-      # Add an whitespace if we print more than just the visual identifier
-      [[ -n "$5" ]] && visual_identifier=" $visual_identifier"
+      echo -n "%F{$3}${_POWERLEVEL9K_RIGHT_SEGMENT_SEPARATOR}%f"
     fi
   fi
 
   echo -n "${bg}${fg}"
 
   # Print whitespace only if segment is not joined or first right segment
-  [[ $joined == false ]] || [[ "$CURRENT_RIGHT_BG" == "NONE" ]] && echo -n "${POWERLEVEL9K_WHITESPACE_BETWEEN_RIGHT_SEGMENTS}"
+  [[ ${joined} == false ]] || [[ "${CURRENT_RIGHT_BG}" == "NONE" ]] && echo -n "${POWERLEVEL9K_WHITESPACE_BETWEEN_RIGHT_SEGMENTS}"
 
-  # Print segment content if there is any
-  [[ -n "$5" ]] && echo -n "${5}"
+  # Print segment content
+  echo -n "${5}"
   # Print the visual identifier
-  echo -n "${visual_identifier}${POWERLEVEL9K_WHITESPACE_BETWEEN_RIGHT_SEGMENTS}%f"
+  echo -n "${6}${POWERLEVEL9K_WHITESPACE_BETWEEN_RIGHT_SEGMENTS}%f"
 
-  CURRENT_RIGHT_BG=$3
-  last_right_element_index=$current_index
+  CURRENT_RIGHT_BG="${3}"
+  last_right_element_index="${current_index}"
 }
 
 ################################################################
 # Prompt Segment Definitions
 ################################################################
 
-# The `CURRENT_BG` variable is used to remember what the last BG color used was
-# when building the left-hand prompt. Because the RPROMPT is created from
-# right-left but reads the opposite, this isn't necessary for the other side.
-CURRENT_BG='NONE'
-
 # Anaconda Environment
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_anaconda() {
   # Depending on the conda version, either might be set. This
   # variant works even if both are set.
-  _path=$CONDA_ENV_PATH$CONDA_PREFIX
-  if ! [ -z "$_path" ]; then
+  local result
+  local _path="${CONDA_ENV_PATH}${CONDA_PREFIX}"
+  if [ ! -z "$_path" ]; then
     # config - can be overwritten in users' zshrc file.
     set_default POWERLEVEL9K_ANACONDA_LEFT_DELIMITER "("
     set_default POWERLEVEL9K_ANACONDA_RIGHT_DELIMITER ")"
-    "$1_prompt_segment" "$0" "$2" "$3" "$4" "$POWERLEVEL9K_ANACONDA_LEFT_DELIMITER$(basename $_path)$POWERLEVEL9K_ANACONDA_RIGHT_DELIMITER" 'PYTHON_ICON'
+
+    result="${POWERLEVEL9K_ANACONDA_LEFT_DELIMITER}$(basename $_path)${POWERLEVEL9K_ANACONDA_RIGHT_DELIMITER}"
   fi
+
+  serialize_segment "$0" "" "$1" "$2" "${3}" "006" "${DEFAULT_COLOR_INVERTED}" "${result}" "PYTHON_ICON"
 }
 
 # AWS Profile
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_aws() {
-  local aws_profile="$AWS_DEFAULT_PROFILE"
-
-  if [[ -n "$aws_profile" ]]; then
-    "$1_prompt_segment" "$0" "$2" red white "$aws_profile" 'AWS_ICON'
-  fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "red" "${DEFAULT_COLOR_INVERTED}" "${AWS_DEFAULT_PROFILE}" "AWS_ICON"
 }
 
 # Current Elastic Beanstalk environment
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_aws_eb_env() {
+  # TODO: Upsearch!
   local eb_env=$(grep environment .elasticbeanstalk/config.yml 2> /dev/null | awk '{print $2}')
 
-  if [[ -n "$eb_env" ]]; then
-    "$1_prompt_segment" "$0" "$2" black green "$eb_env" 'AWS_EB_ICON'
-  fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "${DEFAULT_COLOR}" "green" "${eb_env}" "AWS_EB_ICON"
 }
 
 # Segment to indicate background jobs with an icon.
 set_default POWERLEVEL9K_BACKGROUND_JOBS_VERBOSE true
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_background_jobs() {
   local background_jobs_number=${$(jobs -l | wc -l)// /}
-  local wrong_lines=`jobs -l | awk '/pwd now/{ count++ } END {print count}'`
+  local wrong_lines=$(jobs -l | awk '/pwd now/{ count++ } END {print count}')
   if [[ wrong_lines -gt 0 ]]; then
      background_jobs_number=$(( $background_jobs_number - $wrong_lines ))
   fi
   if [[ background_jobs_number -gt 0 ]]; then
-    local background_jobs_number_print=""
-    if [[ "$POWERLEVEL9K_BACKGROUND_JOBS_VERBOSE" == "true" ]] && [[ "$background_jobs_number" -gt 1 ]]; then
-      background_jobs_number_print="$background_jobs_number"
+    local content=""
+    if [[ "${POWERLEVEL9K_BACKGROUND_JOBS_VERBOSE}" == "true" ]] && [[ "${background_jobs_number}" -gt 1 ]]; then
+      content="$background_jobs_number"
     fi
-    "$1_prompt_segment" "$0" "$2" "$DEFAULT_COLOR" "cyan" "$background_jobs_number_print" 'BACKGROUND_JOBS_ICON'
   fi
+
+  serialize_segment "$0" "" "$1" "$2" "${3}" "${DEFAULT_COLOR}" "cyan" "${content}" "BACKGROUND_JOBS_ICON" "[[ ${background_jobs_number} -gt 0 ]]"
 }
 
 # Segment that indicates usage level of current partition.
 set_default POWERLEVEL9K_DISK_USAGE_ONLY_WARNING false
 set_default POWERLEVEL9K_DISK_USAGE_WARNING_LEVEL 90
 set_default POWERLEVEL9K_DISK_USAGE_CRITICAL_LEVEL 95
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_disk_usage() {
   local current_state="unknown"
   typeset -AH hdd_usage_forecolors
   hdd_usage_forecolors=(
     'normal'        'yellow'
-    'warning'       "$DEFAULT_COLOR"
-    'critical'      'white'
+    'warning'       "${DEFAULT_COLOR}"
+    'critical'      "${DEFAULT_COLOR_INVERTED}"
   )
   typeset -AH hdd_usage_backcolors
   hdd_usage_backcolors=(
@@ -371,15 +332,18 @@ prompt_disk_usage() {
     current_state='normal'
   fi
 
-  local message="${disk_usage}%%"
-
   # Draw the prompt_segment
-  if [[ -n $disk_usage ]]; then
-    "$1_prompt_segment" "${0}_${current_state}" "$2" "${hdd_usage_backcolors[$current_state]}" "${hdd_usage_forecolors[$current_state]}" "$message" 'DISK_ICON'
-  fi
+  serialize_segment "${0}" "${current_state}" "$1" "$2" "${3}" "${hdd_usage_backcolors[$current_state]}" "${hdd_usage_forecolors[$current_state]}" "${disk_usage}%%" "DISK_ICON"
 }
 
+# Battery segment
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
+#   * $4 Root Path: string - An optional root path (used for unit tests @see battery.spec)
 prompt_battery() {
+  local ROOT_PATH="${4}"
   # The battery can have four different states - default to 'unknown'.
   local current_state='unknown'
   typeset -AH battery_states
@@ -392,41 +356,42 @@ prompt_battery() {
   # Set default values if the user did not configure them
   set_default POWERLEVEL9K_BATTERY_LOW_THRESHOLD  10
 
-  if [[ $OS =~ OSX && -f /usr/bin/pmset && -x /usr/bin/pmset ]]; then
+  local pmsetExecutable="${ROOT_PATH}/usr/bin/pmset"
+  if [[ $OS =~ OSX && -f ${pmsetExecutable} && -x ${pmsetExecutable} ]]; then
     # obtain battery information from system
-    local raw_data="$(pmset -g batt | awk 'FNR==2{print}')"
+    local raw_data="$(${pmsetExecutable} -g batt | awk 'FNR==2{print}')"
     # return if there is no battery on system
-    [[ -z $(echo $raw_data | grep "InternalBattery") ]] && return
+    if [[ -n $(echo $raw_data | grep "InternalBattery") ]]; then
+      # Time remaining on battery operation (charging/discharging)
+      local tstring=$(echo "${raw_data}" | awk -F ';' '{print $3}' | awk '{print $1}')
+      # If time has not been calculated by system yet
+      [[ $tstring =~ '(\(no|not)' ]] && tstring="..."
 
-    # Time remaining on battery operation (charging/discharging)
-    local tstring=$(echo $raw_data | awk -F ';' '{print $3}' | awk '{print $1}')
-    # If time has not been calculated by system yet
-    [[ $tstring =~ '(\(no|not)' ]] && tstring="..."
+      # percent of battery charged
+      typeset -i 10 bat_percent
+      bat_percent=$(echo "${raw_data}" | grep -o '[0-9]*%' | sed 's/%//')
 
-    # percent of battery charged
-    typeset -i 10 bat_percent
-    bat_percent=$(echo $raw_data | grep -o '[0-9]*%' | sed 's/%//')
-
-    local remain=""
-    # Logic for string output
-    case $(echo $raw_data | awk -F ';' '{print $2}' | awk '{$1=$1};1') in
-      # for a short time after attaching power, status will be 'AC attached;'
-      'charging'|'finishing charge'|'AC attached')
-        current_state="charging"
-        remain=" ($tstring)"
-        ;;
-      'discharging')
-        [[ $bat_percent -lt $POWERLEVEL9K_BATTERY_LOW_THRESHOLD ]] && current_state="low" || current_state="disconnected"
-        remain=" ($tstring)"
-        ;;
-      *)
-        current_state="charged"
-        ;;
-    esac
+      local remain=""
+      # Logic for string output
+      case $(echo $raw_data | awk -F ';' '{print $2}' | awk '{$1=$1};1') in
+        # for a short time after attaching power, status will be 'AC attached;'
+        'charging'|'finishing charge'|'AC attached')
+          current_state="charging"
+          remain=" ($tstring)"
+          ;;
+        'discharging')
+          [[ $bat_percent -lt $POWERLEVEL9K_BATTERY_LOW_THRESHOLD ]] && current_state="low" || current_state="disconnected"
+          remain=" ($tstring)"
+          ;;
+        *)
+          current_state="charged"
+          ;;
+      esac
+    fi
   fi
 
-  if [[ "$OS" == 'Linux' ]] || [[ "$OS" == 'Android' ]]; then
-    local sysp="/sys/class/power_supply"
+  if [[ "$OS" =~ "Linux" ]] || [[ "$OS" == "Android" ]]; then
+    local sysp="${ROOT_PATH}/sys/class/power_supply"
 
     # Reported BAT0 or BAT1 depending on kernel version
     [[ -a $sysp/BAT0 ]] && local bat=$sysp/BAT0
@@ -436,27 +401,27 @@ prompt_battery() {
     # Tested on: Moto G falcon (CM 13.0)
     [[ -a $sysp/battery ]] && local bat=$sysp/battery
 
-    # Return if no battery found
-    [[ -z $bat ]] && return
-    local capacity=$(cat $bat/capacity)
-    local battery_status=$(cat $bat/status)
-    [[ $capacity -gt 100 ]] && local bat_percent=100 || local bat_percent=$capacity
-    [[ $battery_status =~ Charging || $battery_status =~ Full ]] && local connected=true
-    if [[ -z  $connected ]]; then
-      [[ $bat_percent -lt $POWERLEVEL9K_BATTERY_LOW_THRESHOLD ]] && current_state="low" || current_state="disconnected"
-    else
-      [[ $bat_percent =~ 100 ]] && current_state="charged"
-      [[ $bat_percent -lt 100 ]] && current_state="charging"
-    fi
-    if [[ -f /usr/bin/acpi ]]; then
-      local time_remaining=$(acpi | awk '{ print $5 }')
-      if [[ $time_remaining =~ rate ]]; then
-        local tstring="..."
-      elif [[ $time_remaining =~ "[[:digit:]]+" ]]; then
-        local tstring=${(f)$(date -u -d "$(echo $time_remaining)" +%k:%M 2> /dev/null)}
+    if [[ -n "${bat}" ]]; then
+      local capacity=$(cat $bat/capacity)
+      local battery_status=$(cat $bat/status)
+      [[ $capacity -gt 100 ]] && local bat_percent=100 || local bat_percent=$capacity
+      [[ $battery_status =~ Charging || $battery_status =~ Full ]] && local connected=true
+      if [[ -z $connected ]]; then
+        [[ $bat_percent -lt $POWERLEVEL9K_BATTERY_LOW_THRESHOLD ]] && current_state="low" || current_state="disconnected"
+      else
+        [[ $bat_percent =~ 100 ]] && current_state="charged"
+        [[ $bat_percent -lt 100 ]] && current_state="charging"
       fi
+      if [[ -f ${ROOT_PATH}/usr/bin/acpi ]]; then
+        local time_remaining=$(acpi | awk '{ print $5 }')
+        if [[ $time_remaining =~ rate ]]; then
+          local tstring="..."
+        elif [[ $time_remaining =~ "[[:digit:]]+" ]]; then
+          local tstring=${(f)$(date -u -d "$(echo $time_remaining)" +%k:%M 2> /dev/null)}
+        fi
+      fi
+      [[ -n $tstring ]] && local remain=" ($tstring)"
     fi
-    [[ -n $tstring ]] && local remain=" ($tstring)"
   fi
 
   local message
@@ -482,11 +447,13 @@ prompt_battery() {
   if [[ -n "$POWERLEVEL9K_BATTERY_LEVEL_BACKGROUND" ]] && [[ "${(t)POWERLEVEL9K_BATTERY_LEVEL_BACKGROUND}" =~ "array" ]]; then
     local segment=$(( 100.0 / (${#POWERLEVEL9K_BATTERY_LEVEL_BACKGROUND} - 1 ) ))
     local offset=$(( ($bat_percent / $segment) + 1 ))
-    "$1_prompt_segment" "$0_${current_state}" "$2" "${POWERLEVEL9K_BATTERY_LEVEL_BACKGROUND[$offset]}" "${battery_states[$current_state]}" "${message}" "BATTERY_ICON"
+    # Draw the prompt_segment
+    serialize_segment "$0" "${current_state}" "$1" "$2" "${3}" "${POWERLEVEL9K_BATTERY_LEVEL_BACKGROUND[$offset]}" "${battery_states[$current_state]}" "${message}" "BATTERY_ICON"
   else
     # Draw the prompt_segment
-    "$1_prompt_segment" "$0_${current_state}" "$2" "${DEFAULT_COLOR}" "${battery_states[$current_state]}" "${message}" "BATTERY_ICON"
-  fi
+    serialize_segment "$0" "${current_state}" "$1" "$2" "${3}" "${DEFAULT_COLOR}" "${battery_states[$current_state]}" "${message}" "BATTERY_ICON"
+
+fi
 }
 
 # Public IP segment
@@ -550,15 +517,17 @@ prompt_public_ip() {
   local public_ip="$(cat $POWERLEVEL9K_PUBLIC_IP_FILE)"
 
   # Draw the prompt segment
-  if [[ -n $public_ip ]]; then
-    $1_prompt_segment "$0" "$2" "$DEFAULT_COLOR" "$DEFAULT_COLOR_INVERTED" "${public_ip}" 'PUBLIC_IP_ICON'
-  fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "${DEFAULT_COLOR}" "${DEFAULT_COLOR_INVERTED}" "${public_ip}" "PUBLIC_IP_ICON"
 }
 
 # Context: user@hostname (who am I and where am I)
 # Note that if $DEFAULT_USER is not set, this prompt segment will always print
 set_default POWERLEVEL9K_ALWAYS_SHOW_CONTEXT false
 set_default POWERLEVEL9K_ALWAYS_SHOW_USER false
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 set_default POWERLEVEL9K_CONTEXT_TEMPLATE "%n@%m"
 prompt_context() {
   local current_state="DEFAULT"
@@ -580,22 +549,25 @@ prompt_context() {
 
   elif [[ "$POWERLEVEL9K_ALWAYS_SHOW_USER" == true ]]; then
       content="$USER"
-  else
-      return
   fi
 
-  "$1_prompt_segment" "${0}_${current_state}" "$2" "$DEFAULT_COLOR" "${context_states[$current_state]}" "${content}"
+  serialize_segment "$0" "${state}" "$1" "$2" "${3}" "${DEFAULT_COLOR}" "${context_states[$current_state]}" "${content}" ""
 }
 
 # The 'custom` prompt provides a way for users to invoke commands and display
 # the output in a segment.
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Name: string
+#   * $4 Joined: bool - If the segment should be joined
 prompt_custom() {
-  local command=POWERLEVEL9K_CUSTOM_$3:u
+  local segment_name="${3:u}"
+  # Get content of custom segment
+  local command="POWERLEVEL9K_CUSTOM_${segment_name}"
   local segment_content="$(eval ${(P)command})"
 
-  if [[ -n $segment_content ]]; then
-    "$1_prompt_segment" "${0}_${3:u}" "$2" $DEFAULT_COLOR_INVERTED $DEFAULT_COLOR "$segment_content"
-  fi
+  serialize_segment "$0" "${segment_name}" "$1" "$2" "${4}" "${DEFAULT_COLOR_INVERTED}" "${DEFAULT_COLOR}" "${segment_content}" "CUSTOM_${segment_name}_ICON"
 }
 
 # Display the duration the command needed to run.
@@ -626,14 +598,21 @@ prompt_command_execution_time() {
     humanReadableDuration=$_P9K_COMMAND_DURATION
   fi
 
-  if (( _P9K_COMMAND_DURATION >= POWERLEVEL9K_COMMAND_EXECUTION_TIME_THRESHOLD )); then
-    "$1_prompt_segment" "$0" "$2" "red" "226" "${humanReadableDuration}" 'EXECUTION_TIME_ICON'
+  if (( _P9K_COMMAND_DURATION <= POWERLEVEL9K_COMMAND_EXECUTION_TIME_THRESHOLD )); then
+    # humanReadableDuration=''
+    unset humanReadableDuration
   fi
+
+  serialize_segment "$0" "" "$1" "$2" "${3}" "red" "226" "${humanReadableDuration}" "EXECUTION_TIME_ICON"
 }
 
 # Dir: current working directory
 set_default POWERLEVEL9K_DIR_PATH_SEPARATOR "/"
 set_default POWERLEVEL9K_HOME_FOLDER_ABBREVIATION "~"
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_dir() {
   local current_path="$(print -P "%~")"
   if [[ -n "$POWERLEVEL9K_SHORTEN_DIR_LENGTH" || "$POWERLEVEL9K_SHORTEN_STRATEGY" == "truncate_with_folder_marker" ]]; then
@@ -754,63 +733,65 @@ prompt_dir() {
   elif [[ $(print -P "%~") == '~'* ]]; then
     current_state="HOME_SUBFOLDER"
   fi
-  "$1_prompt_segment" "$0_${current_state}" "$2" "blue" "$DEFAULT_COLOR" "${current_path}" "${dir_states[$current_state]}"
+  serialize_segment "$0" "${current_state}" "$1" "$2" "${3}" "blue" "${DEFAULT_COLOR}" "${current_path}" "${dir_states[$current_state]}"
+}
+
+# dir_writable: Display information about the user's permission to write in the current directory
+prompt_dir_writable() {
+  serialize_segment "$0" "FORBIDDEN" "$1" "$2" "${3}" "red" "226" "" 'LOCK_ICON' '[[ ! -w "$PWD" ]]'
 }
 
 # Docker machine
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_docker_machine() {
-  local docker_machine="$DOCKER_MACHINE_NAME"
-
-  if [[ -n "$docker_machine" ]]; then
-    "$1_prompt_segment" "$0" "$2" "magenta" "$DEFAULT_COLOR" "$docker_machine" 'SERVER_ICON'
-  fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "magenta" "${DEFAULT_COLOR}" "${DOCKER_MACHINE_NAME}" "SERVER_ICON"
 }
 
 # GO prompt
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_go_version() {
-  local go_version
-  go_version=$(go version 2>/dev/null | sed -E "s/.*(go[0-9.]*).*/\1/")
+  local go_version=$(go version 2>/dev/null | sed -E "s/.*(go[0-9.]*).*/\1/")
 
-  if [[ -n "$go_version" ]]; then
-    "$1_prompt_segment" "$0" "$2" "green" "255" "$go_version"
-  fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "green" "${DEFAULT_COLOR_INVERTED}" "${go_version}" ""
 }
 
 # Command number (in local history)
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_history() {
-  "$1_prompt_segment" "$0" "$2" "244" "$DEFAULT_COLOR" '%h'
+  serialize_segment "$0" "" "$1" "$2" "${3}" "244" "${DEFAULT_COLOR}" "%h" ""
 }
 
 # Detection for virtualization (systemd based systems only)
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_detect_virt() {
-  if ! command -v systemd-detect-virt > /dev/null; then
-    return
-  fi
-  local virt=$(systemd-detect-virt)
+  local virt=$(systemd-detect-virt 2> /dev/null)
   if [[ "$virt" == "none" ]]; then
     if [[ "$(ls -di / | grep -o 2)" != "2" ]]; then
       virt="chroot"
-      "$1_prompt_segment" "$0" "$2" "yellow" "$DEFAULT_COLOR" "$virt"
-    else
-      ;
     fi
-  else
-    "$1_prompt_segment" "$0" "$2" "yellow" "$DEFAULT_COLOR" "$virt"
   fi
+
+  serialize_segment "$0" "" "$1" "$2" "${3}" "yellow" "${DEFAULT_COLOR}" "${virt}"
 }
 
-
-prompt_icons_test() {
-  for key in ${(@k)icons}; do
-    # The lower color spectrum in ZSH makes big steps. Choosing
-    # the next color has enough contrast to read.
-    local random_color=$((RANDOM % 8))
-    local next_color=$((random_color+1))
-    "$1_prompt_segment" "$0" "$2" "$random_color" "$next_color" "$key" "$key"
-  done
-}
-
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_ip() {
+  local ip
   if [[ "$OS" == "OSX" ]]; then
     if defined POWERLEVEL9K_IP_INTERFACE; then
       # Get the IP address of the specified interface.
@@ -826,21 +807,28 @@ prompt_ip() {
   else
     if defined POWERLEVEL9K_IP_INTERFACE; then
       # Get the IP address of the specified interface.
-      ip=$(ip -4 a show "$POWERLEVEL9K_IP_INTERFACE" | grep -o "inet\s*[0-9.]*" | grep -o "[0-9.]*")
+      ip=$(ip -4 a show "$POWERLEVEL9K_IP_INTERFACE" | grep -o "inet\s*[0-9.]*" | grep -o -E "[0-9.]+")
     else
       local interfaces callback
       # Get all network interface names that are up
-      interfaces=$(ip link ls up | grep -o -E ":\s+[a-z0-9]+:" | grep -v "lo" | grep -o "[a-z0-9]*")
-      callback='ip -4 a show $item | grep -o "inet\s*[0-9.]*" | grep -o "[0-9.]*"'
-
+      interfaces=$(ip link ls up | grep -o -E ":\s+[a-z0-9]+:" | grep -v "lo" | grep -o -E "[a-z0-9]+")
+      callback='ip -4 a show $item | grep -o "inet\s*[0-9.]*" | grep -o -E "[0-9.]+"'
       ip=$(getRelevantItem "$interfaces" "$callback")
     fi
   fi
 
-  "$1_prompt_segment" "$0" "$2" "cyan" "$DEFAULT_COLOR" "$ip" 'NETWORK_ICON'
+  # Trim whitespaces
+  ip=${ip// /}
+  serialize_segment "$0" "" "$1" "$2" "${3}" "cyan" "${DEFAULT_COLOR}" "${ip}" "NETWORK_ICON"
 }
 
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
+#   * $4 Root Path: string - An optional root path (used for unit tests @see load.spec)
 prompt_load() {
+  local ROOT_PATH="${4}"
   # The load segment can have three different states
   local current_state="unknown"
   local cores
@@ -860,254 +848,407 @@ prompt_load() {
       cores=$(sysctl -n hw.ncpu)
     fi
   else
-    load_avg_1min=$(grep -o "[0-9.]*" /proc/loadavg | head -n 1)
+    load_avg_1min=$(grep -o -E "[0-9.]+" $ROOT_PATH/proc/loadavg | head -n 1)
     cores=$(nproc)
   fi
 
   # Replace comma
   load_avg_1min=${load_avg_1min//,/.}
 
-  if [[ "$load_avg_1min" -gt $(bc -l <<< "${cores} * 0.7") ]]; then
+  if (( $load_avg_1min > (${cores} * 0.7) )); then
     current_state="critical"
-  elif [[ "$load_avg_1min" -gt $(bc -l <<< "${cores} * 0.5") ]]; then
+  elif (( $load_avg_1min > (${cores} * 0.5) )); then
     current_state="warning"
   else
     current_state="normal"
   fi
 
-  "$1_prompt_segment" "${0}_${current_state}" "$2" "${load_states[$current_state]}" "$DEFAULT_COLOR" "$load_avg_1min" 'LOAD_ICON'
+  serialize_segment "$0" "${current_state}" "$1" "$2" "${3}" "${load_states[$current_state]}" "${DEFAULT_COLOR}" "${load_avg_1min}" "LOAD_ICON"
 }
 
 # Node version
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_node_version() {
   local node_version=$(node -v 2>/dev/null)
-  [[ -z "${node_version}" ]] && return
 
-  "$1_prompt_segment" "$0" "$2" "green" "white" "${node_version:1}" 'NODE_ICON'
+  serialize_segment "$0" "" "$1" "$2" "${3}" "green" "${DEFAULT_COLOR_INVERTED}" "${node_version:1}" "NODE_ICON"
 }
 
 # Node version from NVM
 # Only prints the segment if different than the default value
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_nvm() {
-  [[ ! $(type nvm) =~ 'nvm is a shell function'* ]] && return
-  local node_version=$(nvm current)
-  [[ -z "${node_version}" ]] || [[ ${node_version} = "none" ]] && return
-  local nvm_default=$(cat $NVM_DIR/alias/default)
-  [[ "$node_version" =~ "$nvm_default" ]] && return
+  local node_version=$(nvm current 2> /dev/null)
+  [[ "${node_version}" == "none" ]] && node_version=""
+  local nvm_default=$(cat $NVM_DIR/alias/default 2> /dev/null)
+  [[ -n "${nvm_default}" && "${node_version}" =~ "${nvm_default}" ]] && node_version=""
 
-  $1_prompt_segment "$0" "$2" "green" "011" "${node_version:1}" 'NODE_ICON'
+  serialize_segment "$0" "" "$1" "$2" "${3}" "green" "011" "${node_version:1}" "NODE_ICON"
 }
 
 # NodeEnv Prompt
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_nodeenv() {
-  local nodeenv_path="$NODE_VIRTUAL_ENV"
-  if [[ -n "$nodeenv_path" && "$NODE_VIRTUAL_ENV_DISABLE_PROMPT" != true ]]; then
-    local info="$(node -v)[$(basename "$nodeenv_path")]"
-    "$1_prompt_segment" "$0" "$2" "black" "green" "$info" 'NODE_ICON'
+  local info
+  if [[ -n "$NODE_VIRTUAL_ENV" && "$NODE_VIRTUAL_ENV_DISABLE_PROMPT" != true ]]; then
+    info="$(node -v)[$(basename "$NODE_VIRTUAL_ENV")]"
   fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "${DEFAULT_COLOR}" "green" "${info}" "NODE_ICON"
 }
 
 # print a little OS icon
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_os_icon() {
-  "$1_prompt_segment" "$0" "$2" "black" "255" "$OS_ICON"
+  local OS_ICON
+  case "${OS}" in
+    OSX)
+      OS_ICON=$(print_icon 'APPLE_ICON')
+      ;;
+    BSD)
+      OS_ICON=$(print_icon 'FREEBSD_ICON')
+      ;;
+    Linux)
+      OS_ICON=$(print_icon 'LINUX_ICON')
+      ;;
+    Android)
+      OS_ICON=$(print_icon 'ANDROID_ICON')
+      ;;
+    Solaris)
+      OS_ICON=$(print_icon 'SUNOS_ICON')
+      ;;
+  esac
+
+  serialize_segment "$0" "" "$1" "$2" "${3}" "${DEFAULT_COLOR}" "${DEFAULT_COLOR_INVERTED}" "${OS_ICON}" ""
 }
 
 # print PHP version number
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_php_version() {
-  local php_version
-  php_version=$(php -v 2>&1 | grep -oe "^PHP\s*[0-9.]*")
+  local php_version=$(php -v 2>&1 | grep -oe "^PHP\s*[0-9.]*")
 
-  if [[ -n "$php_version" ]]; then
-    "$1_prompt_segment" "$0" "$2" "013" "255" "$php_version"
-  fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "013" "${DEFAULT_COLOR_INVERTED}" "${php_version}" ""
 }
 
 # Show free RAM and used Swap
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
+#   * $4 Root Path: string - An optional root path (used for unit tests @see ram.spec)
 prompt_ram() {
+  local ROOT_PATH="${4}"
   local base=''
   local ramfree=0
   if [[ "$OS" == "OSX" ]]; then
     # Available = Free + Inactive
     # See https://support.apple.com/en-us/HT201538
-    ramfree=$(vm_stat | grep "Pages free" | grep -o -E '[0-9]+')
-    ramfree=$((ramfree + $(vm_stat | grep "Pages inactive" | grep -o -E '[0-9]+')))
+    local pagesFree=$(vm_stat | grep "Pages free" | grep -o -E '[0-9]+')
+    local pagesInactive=$(vm_stat | grep "Pages inactive" | grep -o -E '[0-9]+')
+    ramfree=$((pagesFree + pagesInactive))
     # Convert pages into Bytes
     ramfree=$(( ramfree * 4096 ))
+  elif [[ "$OS" == "BSD" ]]; then
+      ramfree=$(grep 'avail memory' $ROOT_PATH/var/run/dmesg.boot | awk '{print $4}')
   else
-    if [[ "$OS" == "BSD" ]]; then
-      ramfree=$(grep 'avail memory' /var/run/dmesg.boot | awk '{print $4}')
-    else
-      ramfree=$(grep -o -E "MemAvailable:\s+[0-9]+" /proc/meminfo | grep -o "[0-9]*")
-      base='K'
-    fi
+    ramfree=$(grep -o -E "MemAvailable:\s+[0-9]+" $ROOT_PATH/proc/meminfo | grep -o -E "[0-9]+")
+    base='K'
   fi
 
-  "$1_prompt_segment" "$0" "$2" "yellow" "$DEFAULT_COLOR" "$(printSizeHumanReadable "$ramfree" $base)" 'RAM_ICON'
+  serialize_segment "$0" "" "$1" "$2" "${3}" "yellow" "$DEFAULT_COLOR" "$(printSizeHumanReadable "$ramfree" $base)" "RAM_ICON"
 }
 
 # rbenv information
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_rbenv() {
   if which rbenv 2>/dev/null >&2; then
     local rbenv_version_name="$(rbenv version-name)"
     local rbenv_global="$(rbenv global)"
 
     # Don't show anything if the current Ruby is the same as the global Ruby.
-    if [[ $rbenv_version_name == $rbenv_global ]]; then
-      return
+    if [[ "${rbenv_version_name}" == "${rbenv_global}" ]]; then
+      rbenv_version_name=""
     fi
-
-    "$1_prompt_segment" "$0" "$2" "red" "$DEFAULT_COLOR" "$rbenv_version_name" 'RUBY_ICON'
   fi
+
+  serialize_segment "$0" "" "$1" "$2" "${3}" "red" "$DEFAULT_COLOR" "${rbenv_version_name}" "RUBY_ICON"
 }
 
 # chruby information
 # see https://github.com/postmodern/chruby/issues/245 for chruby_auto issue with ZSH
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_chruby() {
   local chruby_env
-  chrb_env="$(chruby 2> /dev/null | grep \* | tr -d '* ')"
+  chruby_env="$(chruby 2> /dev/null | grep \* | tr -d '* ')"
   # Don't show anything if the chruby did not change the default ruby
-  if [[ "${chrb_env:-system}" != "system" ]]; then
-    "$1_prompt_segment" "$0" "$2" "red" "$DEFAULT_COLOR" "${chrb_env}" 'RUBY_ICON'
+  if [[ "${chruby_env:-system}" == "system" ]]; then
+    chruby_env=""
   fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "red" "$DEFAULT_COLOR" "${chruby_env}" "RUBY_ICON"
 }
 
 # Print an icon if user is root.
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_root_indicator() {
-  if [[ "$UID" -eq 0 ]]; then
-    "$1_prompt_segment" "$0" "$2" "$DEFAULT_COLOR" "yellow" "" 'ROOT_ICON'
-  fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "$DEFAULT_COLOR" "yellow" "" "ROOT_ICON" '[[ "${UID}" -eq 0 ]]'
 }
 
 # Print Rust version number
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_rust_version() {
   local rust_version
   rust_version=$(rustc --version 2>&1 | grep -oe "^rustc\s*[^ ]*" | grep -o '[0-9.a-z\\\-]*$')
 
-  if [[ -n "$rust_version" ]]; then
-    "$1_prompt_segment" "$0" "$2" "208" "$DEFAULT_COLOR" "Rust $rust_version" 'RUST_ICON'
-  fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "208" "$DEFAULT_COLOR" "${rust_version}" "RUST_ICON"
 }
-# RSpec test ratio
-prompt_rspec_stats() {
-  if [[ (-d app && -d spec) ]]; then
-    local code_amount tests_amount
-    code_amount=$(ls -1 app/**/*.rb | wc -l)
-    tests_amount=$(ls -1 spec/**/*.rb | wc -l)
 
-    build_test_stats "$1" "$0" "$2" "$code_amount" "$tests_amount" "RSpec" 'TEST_ICON'
-  fi
+# RSpec test ratio
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
+prompt_rspec_stats() {
+  local code_amount tests_amount
+  # Careful! `ls` seems to now work correctly with NULL_GLOB,
+  # as described here http://unix.stackexchange.com/a/26819
+  # This is the reason, why we do not use NULL_GLOB here.
+  code_amount=$({ls -1 app/**/*.rb} 2> /dev/null | wc -l)
+  tests_amount=$({ls -1 spec/**/*.rb} 2> /dev/null | wc -l)
+
+  build_test_stats "$1" "$0" "$2" "${3}" "$code_amount" "$tests_amount" "RSpec" 'TEST_ICON' '[[ (-d app && -d spec && -n ${CONTENT}) ]]'
 }
 
 # Ruby Version Manager information
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_rvm() {
   local gemset=$(echo $GEM_HOME | awk -F'@' '{print $2}')
   [ "$gemset" != "" ] && gemset="@$gemset"
 
   local version=$(echo $MY_RUBY_HOME | awk -F'-' '{print $2}')
 
-  if [[ -n "$version$gemset" ]]; then
-    "$1_prompt_segment" "$0" "$2" "240" "$DEFAULT_COLOR" "$version$gemset" 'RUBY_ICON'
-  fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "240" "$DEFAULT_COLOR" "${version}${gemset}" "RUBY_ICON"
 }
 
 prompt_ssh() {
-  if [[ -n "$SSH_CLIENT" ]] || [[ -n "$SSH_TTY" ]]; then
-    "$1_prompt_segment" "$0" "$2" "$DEFAULT_COLOR" "yellow" "" 'SSH_ICON'
-  fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "$DEFAULT_COLOR" "yellow" "" "SSH_ICON" '[[ -n "$SSH_CLIENT" ]] || [[ -n "$SSH_TTY" ]]'
 }
 
 # Status: return code if verbose, otherwise just an icon if an error occurred
 set_default POWERLEVEL9K_STATUS_VERBOSE true
 set_default POWERLEVEL9K_STATUS_OK_IN_NON_VERBOSE false
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_status() {
-  if [[ "$RETVAL" -ne 0 ]]; then
-    if [[ "$POWERLEVEL9K_STATUS_VERBOSE" == true ]]; then
-      "$1_prompt_segment" "$0_ERROR" "$2" "red" "226" "$RETVAL" 'CARRIAGE_RETURN_ICON'
+  typeset -Ah current_state
+  if [[ "${RETVAL}" -ne 0 ]]; then
+    if [[ "$POWERLEVEL9K_STATUS_VERBOSE" == "true" ]]; then
+      # This is a variant of the error state,
+      # that just has different colors and a
+      # different visual identifier.. sigh.
+      current_state=(
+        "STATE"               "ERROR"
+        "CONTENT"             "${RETVAL}"
+        "BACKGROUND_COLOR"    "red"
+        "FOREGROUND_COLOR"    "226"
+        "VISUAL_IDENTIFIER"   "CARRIAGE_RETURN_ICON"
+      )
     else
-      "$1_prompt_segment" "$0_ERROR" "$2" "$DEFAULT_COLOR" "red" "" 'FAIL_ICON'
+      current_state=(
+        "STATE"               "ERROR"
+        "CONTENT"             "${RETVAL}"
+        "BACKGROUND_COLOR"    "${DEFAULT_COLOR}"
+        "FOREGROUND_COLOR"    "red"
+        "VISUAL_IDENTIFIER"   "FAIL_ICON"
+      )
     fi
-  elif [[ "$POWERLEVEL9K_STATUS_VERBOSE" == true || "$POWERLEVEL9K_STATUS_OK_IN_NON_VERBOSE" == true ]]; then
-    "$1_prompt_segment" "$0_OK" "$2" "$DEFAULT_COLOR" "green" "" 'OK_ICON'
+  elif [[ "$POWERLEVEL9K_STATUS_VERBOSE" == "true" || "$POWERLEVEL9K_STATUS_OK_IN_NON_VERBOSE" == "true" ]]; then
+    current_state=(
+      "STATE"               "OK"
+      "CONTENT"             "${RETVAL}"
+      "BACKGROUND_COLOR"    "${DEFAULT_COLOR}"
+      "FOREGROUND_COLOR"    "green"
+      "VISUAL_IDENTIFIER"   "OK_ICON"
+    )
   fi
+
+  serialize_segment "$0" "${current_state[STATE]}" "$1" "$2" "${3}" "${current_state[BACKGROUND_COLOR]}" "${current_state[FOREGROUND_COLOR]}" "${current_state[CONTENT]}" "${current_state[VISUAL_IDENTIFIER]}"
 }
 
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
+#   * $4 Root Path: string - An optional root path (used for unit tests @see swap.spec)
 prompt_swap() {
+  local ROOT_PATH="${4}"
   local swap_used=0
   local base=''
 
   if [[ "$OS" == "OSX" ]]; then
     local raw_swap_used
-    raw_swap_used=$(sysctl vm.swapusage | grep -o "used\s*=\s*[0-9,.A-Z]*" | grep -o "[0-9,.A-Z]*$")
+    raw_swap_used=$(sysctl vm.swapusage | grep -o "used\s*=\s*[0-9,.A-Z]*" | grep -o -E "[0-9,.A-Z]+")
 
     typeset -F 2 swap_used
-    swap_used=${$(echo $raw_swap_used | grep -o "[0-9,.]*")//,/.}
+    swap_used=${$(echo $raw_swap_used | grep -o -E "[0-9,.]+")//,/.}
     # Replace comma
     swap_used=${swap_used//,/.}
 
-    base=$(echo "$raw_swap_used" | grep -o "[A-Z]*$")
+    base=$(echo "$raw_swap_used" | grep -o -E "[A-Z]+")
   else
-    swap_total=$(grep -o -E "SwapTotal:\s+[0-9]+" /proc/meminfo | grep -o "[0-9]*")
-    swap_free=$(grep -o -E "SwapFree:\s+[0-9]+" /proc/meminfo | grep -o "[0-9]*")
+    swap_total=$(grep -o -E "SwapTotal:\s+[0-9]+" $ROOT_PATH/proc/meminfo | grep -o -E "[0-9]+")
+    swap_free=$(grep -o -E "SwapFree:\s+[0-9]+" $ROOT_PATH/proc/meminfo | grep -o -E "[0-9]+")
     swap_used=$(( swap_total - swap_free ))
     base='K'
   fi
 
-  "$1_prompt_segment" "$0" "$2" "yellow" "$DEFAULT_COLOR" "$(printSizeHumanReadable "$swap_used" $base)" 'SWAP_ICON'
+  serialize_segment "$0" "" "$1" "$2" "${3}" "yellow" "$DEFAULT_COLOR" "$(printSizeHumanReadable "$swap_used" $base)" "SWAP_ICON"
+}
+
+# Swift version
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
+prompt_swift_version() {
+  # Get the first number as this is probably the "main" version number..
+  local swift_version=$(swift --version 2>/dev/null | grep -o -E "[0-9.]+" | head -n 1)
+
+  serialize_segment "$0" "" "$1" "$2" "${3}" "magenta" "${DEFAULT_COLOR_INVERTED}" "${swift_version}" "SWIFT_ICON"
 }
 
 # Symfony2-PHPUnit test ratio
-prompt_symfony2_tests() {
-  if [[ (-d src && -d app && -f app/AppKernel.php) ]]; then
-    local code_amount tests_amount
-    code_amount=$(ls -1 src/**/*.php | grep -vc Tests)
-    tests_amount=$(ls -1 src/**/*.php | grep -c Tests)
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
+prompt_symfony_tests() {
+  local code_amount tests_amount
+  # Careful! `ls` seems to now work correctly with NULL_GLOB,
+  # as described here http://unix.stackexchange.com/a/26819
+  # This is the reason, why we do not use NULL_GLOB here.
+  code_amount=$({ls -1 src/**/*.php} 2> /dev/null | grep -vc Tests)
+  tests_amount=$({ls -1 src/**/*.php} 2> /dev/null | grep -c Tests)
 
-    build_test_stats "$1" "$0" "$2" "$code_amount" "$tests_amount" "SF2" 'TEST_ICON'
-  fi
+  build_test_stats "$1" "$0" "$2" "${3}" "$code_amount" "$tests_amount" "SF2" 'TEST_ICON' '[[ (-d src && -d app && -f app/AppKernel.php && -n "${CONTENT}") ]]'
 }
 
 # Symfony2-Version
-prompt_symfony2_version() {
-  if [[ -f app/bootstrap.php.cache ]]; then
-    local symfony2_version
-    symfony2_version=$(grep " VERSION " app/bootstrap.php.cache | sed -e 's/[^.0-9]*//g')
-    "$1_prompt_segment" "$0" "$2" "240" "$DEFAULT_COLOR" "$symfony2_version" 'SYMFONY_ICON'
-  fi
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
+prompt_symfony_version() {
+  local version=""
+  # Search for app/AppKernel.php as this file is pretty unique to symfony.
+  for marked_folder in $(upsearch app/AppKernel.php); do
+    if [[ "$marked_folder" == "/" ]]; then
+      # If we reached root folder, stop upsearch.
+      version=""
+    elif [[ "$marked_folder" == "$HOME" ]]; then
+      # If we reached home folder, stop upsearch.
+      version=""
+    else
+      cd "$marked_folder" &>/dev/null
+      version=$(php bin/console --version --no-ansi 2>/dev/null | grep -E "Symfony version [0-9.]+" | grep -o -E "[0-9.]+")
+      cd - &>/dev/null
+    fi
+  done
+
+  serialize_segment "$0" "" "$1" "$2" "${3}" "240" "$DEFAULT_COLOR" "${version}" "SYMFONY_ICON"
 }
 
 # Show a ratio of tests vs code
+#   * $1 Alignment: string - left|right
+#   * $2 Name: string - Name of the segment
+#   * $3 Index: integer
+#   * $4 Joined: bool
+#   * $5 Amount of code: integer
+#   * $6 Amount of tests: integer
+#   * $7 Content: string - Content of the segment
+#   * $8 Visual identifier: string - Icon of the segment
+#   * $9 Condition
 build_test_stats() {
-  local code_amount="$4"
-  local tests_amount="$5"+0.00001
-  local headline="$6"
+  local joined="${4}"
+  local code_amount="${5}"
+  local tests_amount="${6}"+0.00001
+  local headline="${7}"
+
+  local current_state="unknown"
+  typeset -AH test_states
+  test_states=(
+    'GOOD'          'cyan'
+    'AVG'           'yellow'
+    'BAD'           'red'
+  )
 
   # Set float precision to 2 digits:
   typeset -F 2 ratio
-  local ratio=$(( (tests_amount/code_amount) * 100 ))
+  local ratio=0
+  local content=''
+  if (( code_amount > 0 )); then
+    ratio=$(( (tests_amount/code_amount) * 100 ))
 
-  (( ratio >= 75 )) && "$1_prompt_segment" "${2}_GOOD" "$3" "cyan" "$DEFAULT_COLOR" "$headline: $ratio%%" "$6"
-  (( ratio >= 50 && ratio < 75 )) && "$1_prompt_segment" "$2_AVG" "$3" "yellow" "$DEFAULT_COLOR" "$headline: $ratio%%" "$6"
-  (( ratio < 50 )) && "$1_prompt_segment" "$2_BAD" "$3" "red" "$DEFAULT_COLOR" "$headline: $ratio%%" "$6"
+    (( ratio >= 75 )) && current_state="GOOD"
+    (( ratio >= 50 && ratio < 75 )) && current_state="AVG"
+    (( ratio < 50 )) && current_state="BAD"
+
+    content="$headline: $ratio%%"
+  fi
+
+  serialize_segment "${2}" "$current_state" "${1}" "${3}" "${joined}" "${test_states[$current_state]}" "${DEFAULT_COLOR}" "${content}" "${8}" "${9}"
 }
 
 # System time
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_time() {
-  local time_format="%D{%H:%M:%S}"
-  if [[ -n "$POWERLEVEL9K_TIME_FORMAT" ]]; then
-    time_format="$POWERLEVEL9K_TIME_FORMAT"
-  fi
+  set_default POWERLEVEL9K_TIME_FORMAT "%D{%H:%M:%S}"
 
-  "$1_prompt_segment" "$0" "$2" "$DEFAULT_COLOR_INVERTED" "$DEFAULT_COLOR" "$time_format"
+  serialize_segment "$0" "" "$1" "$2" "${3}" "$DEFAULT_COLOR_INVERTED" "$DEFAULT_COLOR" "${POWERLEVEL9K_TIME_FORMAT}" ""
 }
 
 # todo.sh: shows the number of tasks in your todo.sh file
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_todo() {
-  if $(hash todo.sh 2>&-); then
-    count=$(todo.sh ls | egrep "TODO: [0-9]+ of ([0-9]+) tasks shown" | awk '{ print $4 }')
-    if [[ "$count" = <-> ]]; then
-      "$1_prompt_segment" "$0" "$2" "244" "$DEFAULT_COLOR" "$count" 'TODO_ICON'
-    fi
-  fi
+  local todos=$(todo.sh ls 2>/dev/null | egrep "TODO: [0-9]+ of ([0-9]+) tasks shown" | awk '{ print $4 }')
+
+  serialize_segment "$0" "" "$1" "$2" "${3}" "244" "$DEFAULT_COLOR" "${todos}" "TODO_ICON"
 }
 
 # VCS segment: shows the state of your repository, if you are in a folder under
@@ -1125,14 +1266,6 @@ powerlevel9k_vcs_init() {
 
   VCS_WORKDIR_DIRTY=false
   VCS_WORKDIR_HALF_DIRTY=false
-
-  # The vcs segment can have three different states - defaults to 'clean'.
-  typeset -gAH vcs_states
-  vcs_states=(
-    'clean'         'green'
-    'modified'      'yellow'
-    'untracked'     'green'
-  )
 
   VCS_CHANGESET_PREFIX=''
   if [[ "$POWERLEVEL9K_SHOW_CHANGESET" == true ]]; then
@@ -1175,16 +1308,29 @@ powerlevel9k_vcs_init() {
   fi
 }
 
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_vcs() {
+  powerlevel9k_vcs_init
+
   VCS_WORKDIR_DIRTY=false
   VCS_WORKDIR_HALF_DIRTY=false
-  current_state=""
+  local current_state="unknown"
+  # The vcs segment can have three different states - defaults to 'clean'.
+  typeset -gAH vcs_states
+  vcs_states=(
+    'clean'         'green'
+    'modified'      'yellow'
+    'untracked'     'green'
+  )
 
   # Actually invoke vcs_info manually to gather all information.
   vcs_info
   local vcs_prompt="${vcs_info_msg_0_}"
 
-  if [[ -n "$vcs_prompt" ]]; then
+  if [[ -n "${vcs_prompt}" ]]; then
     if [[ "$VCS_WORKDIR_DIRTY" == true ]]; then
       # $vcs_visual_identifier gets set in +vi-vcs-detect-changes in functions/vcs.zsh,
       # as we have there access to vcs_info internal hooks.
@@ -1196,38 +1342,57 @@ prompt_vcs() {
         current_state='clean'
       fi
     fi
-    "$1_prompt_segment" "${0}_${(U)current_state}" "$2" "${vcs_states[$current_state]}" "$DEFAULT_COLOR" "$vcs_prompt" "$vcs_visual_identifier"
   fi
+  serialize_segment "$0" "$current_state" "$1" "$2" "${3}" "${vcs_states[$current_state]}" "$DEFAULT_COLOR" "${vcs_prompt}" "$vcs_visual_identifier"
 }
 
 # Vi Mode: show editing mode (NORMAL|INSERT)
-set_default POWERLEVEL9K_VI_INSERT_MODE_STRING "INSERT"
-set_default POWERLEVEL9K_VI_COMMAND_MODE_STRING "NORMAL"
+set_default "POWERLEVEL9K_VI_INSERT_MODE_STRING" "INSERT"
+set_default "POWERLEVEL9K_VI_COMMAND_MODE_STRING" "NORMAL"
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_vi_mode() {
-  case ${KEYMAP} in
+  local vi_mode
+  local current_state
+  typeset -gAH vi_states
+  vi_states=(
+    'NORMAL'      "${DEFAULT_COLOR_INVERTED}"
+    'INSERT'      'blue'
+  )
+  case "${KEYMAP}" in
     main|viins)
-      "$1_prompt_segment" "$0_INSERT" "$2" "$DEFAULT_COLOR" "blue" "$POWERLEVEL9K_VI_INSERT_MODE_STRING"
+      current_state="INSERT"
+      vi_mode="${POWERLEVEL9K_VI_INSERT_MODE_STRING}"
     ;;
     vicmd)
-      "$1_prompt_segment" "$0_NORMAL" "$2" "$DEFAULT_COLOR" "default" "$POWERLEVEL9K_VI_COMMAND_MODE_STRING"
+      current_state="NORMAL"
+      vi_mode="${POWERLEVEL9K_VI_COMMAND_MODE_STRING}"
     ;;
   esac
+  serialize_segment "${0}" "${current_state}" "${1}" "${2}" "${3}" "${DEFAULT_COLOR}" "${vi_states[$current_state]}" "${vi_mode}" ''
 }
 
 # Virtualenv: current working virtualenv
 # More information on virtualenv (Python):
 # https://virtualenv.pypa.io/en/latest/
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_virtualenv() {
-  local virtualenv_path="$VIRTUAL_ENV"
-  if [[ -n "$virtualenv_path" && "$VIRTUAL_ENV_DISABLE_PROMPT" != true ]]; then
-    "$1_prompt_segment" "$0" "$2" "blue" "$DEFAULT_COLOR" "$(basename "$virtualenv_path")" 'PYTHON_ICON'
-  fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "blue" "$DEFAULT_COLOR" "$(basename "${VIRTUAL_ENV}")" "PYTHON_ICON"
 }
 
 # pyenv: current active python version (with restrictions)
 # More information on pyenv (Python version manager like rbenv and rvm):
 # https://github.com/yyuu/pyenv
 # the prompt parses output of pyenv version and only displays the first word
+# Parameters:
+#   * $1 Alignment: string - left|right
+#   * $2 Index: integer
+#   * $3 Joined: bool - If the segment should be joined
 prompt_pyenv() {
   local pyenv_version="$(pyenv version 2>/dev/null)"
   pyenv_version="${pyenv_version%% *}"
@@ -1235,26 +1400,277 @@ prompt_pyenv() {
   # This reads better for devs familiar with sed/awk/grep/cut utilities
   # Using shell expansion/substitution may hamper future maintainability
   #local pyenv_version="$(pyenv version 2>/dev/null | head -n1 | cut -d' ' -f1)"
-  if [[ -n "$pyenv_version" && "$pyenv_version" != "system" ]]; then
-    "$1_prompt_segment" "$0" "$2" "blue" "$DEFAULT_COLOR" "$pyenv_version" 'PYTHON_ICON'
+  if [[ "${pyenv_version}" != "system" ]]; then
+    pyenv_version=""
+  fi
+  serialize_segment "$0" "" "$1" "$2" "${3}" "blue" "$DEFAULT_COLOR" "$pyenv_version" "PYTHON_ICON"
+}
+
+################################################################
+# Caching functions
+################################################################
+
+# This function serializes a segment to disk under /tmp/p9k/
+# When done with writing to disk, the function sends a
+# signal to the parent process.
+#
+# Parameters:
+#   * $1 Name: string - Name of the segment
+#   * $2 State: string - The state the segment is in
+#   * $3 Alignment: string - left|right
+#   * $4 Index: integer
+#   * $5 Joined: bool - If the segment should be joined
+#   * $6 Background: string - The default background color of the segment
+#   * $7 Foreground: string - The default foreground color of the segment
+#   * $8 Content: string - Content of the segment
+#   * $9 Visual identifier: string - Icon of the segment
+#   * $10 Condition: string - The condition, if the segment should be printed (gets evaluated)
+serialize_segment() {
+  local NAME="${1}"
+  local STATE="${2}"
+  local ALIGNMENT="${3}"
+  local INDEX="${4}"
+  local JOINED="${5}"
+  local DURATION="$((EPOCHREALTIME - _P9K_SEGMENT_TIMER_START))"
+
+  ################################################################
+  # Methodology behind user-defined variables overwriting colors:
+  #     The first parameter to the segment constructors is the calling function's
+  #     name. From this function name, we strip the "prompt_"-prefix and
+  #     uppercase it. This is then prefixed with "POWERLEVEL9K_" and suffixed
+  #     with either "_BACKGROUND" or "_FOREGROUND", thus giving us the variable
+  #     name. So each new segment is user-overwritten by a variable following
+  #     this naming convention.
+  ################################################################
+
+  local STATEFUL_NAME="${(U)NAME#prompt_}"
+  [[ -n "${STATE}" ]] && STATEFUL_NAME="${STATEFUL_NAME}_${(U)STATE}"
+
+  # Overwrite given background-color by user defined variable for this segment.
+  local BACKGROUND_USER_VARIABLE="POWERLEVEL9K_${STATEFUL_NAME}_BACKGROUND"
+  local BACKGROUND="${(P)BACKGROUND_USER_VARIABLE}"
+  [[ -z "${BACKGROUND}" ]] && BACKGROUND="${6}"
+
+  # Overwrite given foreground-color by user defined variable for this segment.
+  local FOREGROUND_USER_VARIABLE="POWERLEVEL9K_${STATEFUL_NAME}_FOREGROUND"
+  local FOREGROUND="${(P)FOREGROUND_USER_VARIABLE}"
+  [[ -z "${FOREGROUND}" ]] && FOREGROUND="${7}"
+
+  local CONTENT="${8}"
+
+  local VISUAL_IDENTIFIER
+  if [[ -n "${9}" ]]; then
+    VISUAL_IDENTIFIER="$(print_icon ${9})"
+    if [[ -n "${VISUAL_IDENTIFIER}" ]]; then
+      # Allow users to overwrite the color for the visual identifier only.
+      local visual_identifier_color_variable="POWERLEVEL9K_${STATEFUL_NAME}_VISUAL_IDENTIFIER_COLOR"
+      set_default "${visual_identifier_color_variable}" "${FOREGROUND}"
+      VISUAL_IDENTIFIER="%F{${(P)visual_identifier_color_variable}%}${VISUAL_IDENTIFIER}%f"
+      # Add an whitespace if we print more than just the visual identifier
+      if [[ -n "${CONTENT}" ]]; then
+        [[ "${ALIGNMENT}" == "left" ]] && VISUAL_IDENTIFIER="${VISUAL_IDENTIFIER} "
+        [[ "${ALIGNMENT}" == "right" ]] && VISUAL_IDENTIFIER=" ${VISUAL_IDENTIFIER}"
+      fi
+    fi
+  fi
+
+  # Conditions have three layers:
+  # 1. All segments should not print
+  #    a segemnt, if they provide no
+  #    content (default condition).
+  # 2. All segments could define a
+  #    default condition on their
+  #    own, overriding the previous
+  #    one.
+  # 3. Users could set a condition
+  #    for each segment. This is
+  #    the trump card, and has
+  #    highest precedence.
+  local CONDITION
+  local SEGMENT_CONDITION="POWERLEVEL9K_${STATEFUL_NAME}_CONDITION"
+  if defined "${SEGMENT_CONDITION}"; then
+    CONDITION="${(P)SEGMENT_CONDITION}"
+  elif [[ -n "${10}" ]]; then
+    CONDITION="${10}"
+  else
+    CONDITION='[[ -n "${CONTENT}" ]]'
+  fi
+  # Precompile condition, as we are here in the async child process.
+  eval "${CONDITION}" && CONDITION=true || CONDITION=false
+
+  local FILE="${CACHE_DIR}/p9k_$$_${ALIGNMENT}_${(l:3::0:)INDEX}_${NAME}.sh"
+
+  # From the manpage of typeset:
+  #   If the -p option is given, parameters and values are printed in the form
+  #   of a typeset command with an assignment, regardless of other flags and
+  #   options.  Note that the -H flag on parameters is respected; no value
+  #   will  be  shown  for  these parameters.
+  # Redirection with `>!`. From the manpage: Same as >, except that the file
+  #   is truncated to zero length if it exists, even if CLOBBER is unset.
+  # If the file already exists, and a simple `>` redirection and CLOBBER
+  # unset, ZSH will produce an error.
+  typeset -p "NAME" >! $FILE
+  typeset -p "STATE" >> $FILE
+  typeset -p "ALIGNMENT" >> $FILE
+  typeset -p "INDEX" >> $FILE
+  typeset -p "JOINED" >> $FILE
+  typeset -p "BACKGROUND" >> $FILE
+  typeset -p "FOREGROUND" >> $FILE
+  typeset -p "CONTENT" >> $FILE
+  typeset -p "VISUAL_IDENTIFIER" >> $FILE
+  typeset -p "CONDITION" >> $FILE
+  typeset -p "DURATION" >> $FILE
+
+  # send WINCH signal to parent process
+  kill -s WINCH $$
+  # Block for long enough for the signal to come through
+  sleep 1
+}
+
+# Rebuild prompt from cache every time
+# a child process terminates (= sends
+# SIGWINCH). We read in the segments
+# variables, use that information to
+# glue the segments back togeher and
+# finally reset the prompt.
+set_default CACHE_DIR /tmp/p9k
+# Create cache dir
+mkdir -p "${CACHE_DIR}" 2> /dev/null
+#   $1 - Signal that should be propagated
+p9k_build_prompt_from_cache() {
+  last_left_element_index=1 # Reset
+  local LAST_LEFT_BACKGROUND='NONE' # Reset
+  local LAST_RIGHT_BACKGROUND='NONE' # Reset
+  PROMPT='' # Reset
+  RPROMPT='' # Reset
+  local RPROMPT_SUFFIX=''
+  local PROMPT_SUFFIX=''
+  if [[ "${POWERLEVEL9K_PROMPT_ON_NEWLINE}" == true ]]; then
+    PROMPT="$(print_icon 'MULTILINE_FIRST_PROMPT_PREFIX')%f%b%k${PROMPT}"
+    PROMPT_SUFFIX="
+$(print_icon 'MULTILINE_SECOND_PROMPT_PREFIX')"
+    if [[ "${POWERLEVEL9K_RPROMPT_ON_NEWLINE}" != true ]]; then
+      # The right prompt should be on the same line as the first line of the left
+      # prompt. To do so, there is just a quite ugly workaround: Before zsh draws
+      # the RPROMPT, we advise it, to go one line up. At the end of RPROMPT, we
+      # advise it to go one line down. See:
+      # http://superuser.com/questions/357107/zsh-right-justify-in-ps1
+      local LC_ALL="" LC_CTYPE="en_US.UTF-8" # Set the right locale to protect special characters
+      RPROMPT='%{'$'\e[1A''%}' # one line up
+      RPROMPT_SUFFIX='%{'$'\e[1B''%}' # one line down
+    fi
+  fi
+
+  typeset -Ah last_segments_print_states
+  last_segments_print_states=()
+  typeset -Ah last_segments_join_states
+  last_segments_join_states=()
+
+  # (N) sets the NULL_GLOB option, so that if the glob does
+  # not return files, an error message is suppressed.
+  for cacheFile in ${CACHE_DIR}/p9k_$$_*(N); do
+    source "${cacheFile}"
+
+    local paddedIndex="${(l:3::0:)INDEX}"
+
+    # Default: Segment should NOT be joined.
+    local should_join_segment=false
+
+    # If the current segment wants to be joined, we need
+    # to have a close look at our predecessors.
+    if [[ "${JOINED}" == "true" ]]; then
+      # If we want to know if the current segment should be joined or
+      # not, we need to consider the previous segments join state and
+      # whether they were printed or not.
+      # Beginning from our current position and moving to the left (as
+      # this is the joining direction; segments can always be joined
+      # with their predecessor, a.k.a. previous left segment). As soon
+      # as we find a segment that was not joined and not printed, we
+      # promote the segment to a full one.
+      should_join_segment=true
+      for ((n=${INDEX}; n > 0; n=${n}-1)); do
+        # Little magic trick: We start from current index, although we
+        # just want to examine our ancestors because the current
+        # segment is not yet in the array. So we just skip one step
+        # implicitly.
+        local currentPaddedIndex="${(l:3::0:)n}"
+        local print_state=$last_segments_print_states["${ALIGNMENT}_${currentPaddedIndex}"]
+        local join_state=$last_segments_join_states["${ALIGNMENT}_${currentPaddedIndex}"]
+
+        if [[ "${join_state}" == "false" && "${print_state}" == "false" ]]; then
+          should_join_segment=false
+          # Break the loop as early as possible. If we know that our segment should
+          # be promoted, we got the relevant information we wanted.
+          break
+        elif [[ "${join_state}" == "true" && "${print_state}" == "true" ]]; then
+          # If previous segment was joined and printed, we can break here
+          # because this previous segment should handle its join state.
+          break
+        elif [[ "${join_state}" == "false" ]]; then
+          break
+        fi
+      done
+    fi
+
+    last_segments_join_states["${ALIGNMENT}_${paddedIndex}"]="${JOINED}"
+    last_segments_print_states["${ALIGNMENT}_${paddedIndex}"]="${CONDITION}"
+
+    # If the segments condition to print was not met, skip it!
+    if ! ${CONDITION}; then
+      continue
+    fi
+
+    local statefulName="${NAME}"
+    [[ -n "${STATE}" ]] && statefulName="${NAME}_${STATE}"
+
+    if [[ "${ALIGNMENT}" == "left" ]]; then
+      PROMPT+=$("${(L)ALIGNMENT}_prompt_segment" "${statefulName}" "${INDEX}" "${BACKGROUND}" "${FOREGROUND}" "${CONTENT}" "${VISUAL_IDENTIFIER}" "${LAST_LEFT_BACKGROUND}" "${should_join_segment}")
+      LAST_LEFT_BACKGROUND="${BACKGROUND}"
+    elif [[ "${ALIGNMENT}" == "right" ]]; then
+      RPROMPT+=$("${(L)ALIGNMENT}_prompt_segment" "${statefulName}" "${INDEX}" "${BACKGROUND}" "${FOREGROUND}" "${CONTENT}" "${VISUAL_IDENTIFIER}" "${LAST_RIGHT_BACKGROUND}" "${should_join_segment}")
+      LAST_RIGHT_BACKGROUND="${BACKGROUND}"
+    fi
+  done
+  PROMPT+="$(left_prompt_end ${LAST_LEFT_BACKGROUND})"
+  PROMPT+="${PROMPT_SUFFIX}"
+  RPROMPT+="${RPROMPT_SUFFIX}"
+
+  NEWLINE='
+'
+  [[ "${POWERLEVEL9K_PROMPT_ADD_NEWLINE}" == "true" ]] && PROMPT="${NEWLINE}${PROMPT}"
+
+  # About .reset-promt see:
+  # https://github.com/sorin-ionescu/prezto/issues/1026
+  # https://github.com/zsh-users/zsh-autosuggestions/issues/107#issuecomment-183824034
+  zle && zle .reset-prompt
+
+  # Add zero to $1, so that we can call this function without parameters
+  # in tests..
+  return $(( 128 + ($1 + 0) ))
+}
+# Register trap on WINCH (Rebuild prompt)
+trap "p9k_build_prompt_from_cache WINCH" WINCH
+
+#   $1 - Signal that should be propagated
+p9k_clear_cache() {
+  # Stupid way to avoid "no matches found" globbing error on
+  # deleting cache files.
+  touch ${CACHE_DIR}/p9k_$$_dummy
+  # (N) sets the NULL_GLOB option, so that if the glob does
+  # not return files, an error message is suppressed.
+  rm -f ${CACHE_DIR}/p9k_$$_*(N)
+
+  # We also call this function from `powerlevel9k_prepare_prompt`
+  # There we just want to clean the cache without having signal
+  # to propagate. This is the reason, why we need the condition.
+  if [[ -n "${1}" ]]; then
+    return $(( 128 + $1 ))
   fi
 }
-
-# Swift version
-prompt_swift_version() {
-  # Get the first number as this is probably the "main" version number..
-  local swift_version=$(swift --version 2>/dev/null | grep -o -E "[0-9.]+" | head -n 1)
-  [[ -z "${swift_version}" ]] && return
-
-  "$1_prompt_segment" "$0" "$2" "magenta" "white" "${swift_version}" 'SWIFT_ICON'
-}
-
-# dir_writable: Display information about the user's permission to write in the current directory
-prompt_dir_writable() {
-  if [[ ! -w "$PWD" ]]; then
-    "$1_prompt_segment" "$0_FORBIDDEN" "$2" "red" "226" "" 'LOCK_ICON'
-  fi
-}
+# Register trap on EXIT (cleanup)
+trap "p9k_clear_cache EXIT" EXIT
+# Register trap on TERM (cleanup)
+trap "p9k_clear_cache TERM" TERM
 
 ################################################################
 # Prompt processing and drawing
@@ -1263,83 +1679,123 @@ prompt_dir_writable() {
 build_left_prompt() {
   local index=1
   for element in "${POWERLEVEL9K_LEFT_PROMPT_ELEMENTS[@]}"; do
+    local joined=false
+    [[ "${element[-7,-1]}" == '_joined' ]] && joined=true
     # Remove joined information in direct calls
-    element=${element%_joined}
+    element="${element%_joined}"
 
     # Check if it is a custom command, otherwise interpet it as
     # a prompt.
     if [[ $element[0,7] =~ "custom_" ]]; then
-      "prompt_custom" "left" "$index" $element[8,-1]
+      "prompt_custom" "left" "${index}" "${element[8,-1]}" "${joined}" &!
     else
-      "prompt_$element" "left" "$index"
+      # Could we display placeholders?
+      # -> At most it could be static ones, but
+      # e.g. states are the result of calculation..
+      "prompt_$element" "left" "${index}" "${joined}" &!
     fi
 
     index=$((index + 1))
   done
-
-  left_prompt_end
 }
 
 # Right prompt
 build_right_prompt() {
   local index=1
   for element in "${POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS[@]}"; do
+    local joined=false
+    [[ "${element[-7,-1]}" == '_joined' ]] && joined=true
     # Remove joined information in direct calls
-    element=${element%_joined}
+    element="${element%_joined}"
 
     # Check if it is a custom command, otherwise interpet it as
     # a prompt.
     if [[ $element[0,7] =~ "custom_" ]]; then
-      "prompt_custom" "right" "$index" $element[8,-1]
+      "prompt_custom" "right" "$index" "${element[8,-1]}" "${joined}" &!
     else
-      "prompt_$element" "right" "$index"
+      "prompt_$element" "right" "$index" "${joined}" &!
     fi
 
     index=$((index + 1))
   done
 }
 
+# This hook runs before the command runs.
 powerlevel9k_preexec() {
+  # The Timer is started here, but the end
+  # is taken in powerlevel_prepare_prompts,
+  # as this method is a precmd hook and runs
+  # right before the prompt gets rendered. So
+  # we can calculate the duration there.
   _P9K_TIMER_START=$EPOCHREALTIME
 }
 
-set_default POWERLEVEL9K_PROMPT_ADD_NEWLINE false
+ASYNC_PROC=0
 powerlevel9k_prepare_prompts() {
   RETVAL=$?
 
+  # Kill all spawns that are not the main process!
+  # This method gets called every time, because it
+  # is a precmd hook registered in powerlevel9k_init!
+  # The child processes must be killed, because they
+  # should only be triggered once to build their
+  # segment and nothing else.
+  if [[ "${ASYNC_PROC}" != 0 ]]; then
+    kill -s HUP ${ASYNC_PROC} >/dev/null 2>&1 || :
+  fi
+
+  # Timing calculation
   _P9K_COMMAND_DURATION=$((EPOCHREALTIME - _P9K_TIMER_START))
 
   # Reset start time
   _P9K_TIMER_START=0x7FFFFFFF
+  # Start segment timing
+  _P9K_SEGMENT_TIMER_START="${EPOCHREALTIME}"
 
-  if [[ "$POWERLEVEL9K_PROMPT_ON_NEWLINE" == true ]]; then
-    PROMPT='$(print_icon 'MULTILINE_FIRST_PROMPT_PREFIX')%f%b%k$(build_left_prompt)
-$(print_icon 'MULTILINE_SECOND_PROMPT_PREFIX')'
-    if [[ "$POWERLEVEL9K_RPROMPT_ON_NEWLINE" != true ]]; then
-      # The right prompt should be on the same line as the first line of the left
-      # prompt. To do so, there is just a quite ugly workaround: Before zsh draws
-      # the RPROMPT, we advise it, to go one line up. At the end of RPROMPT, we
-      # advise it to go one line down. See:
-      # http://superuser.com/questions/357107/zsh-right-justify-in-ps1
-      local LC_ALL="" LC_CTYPE="en_US.UTF-8" # Set the right locale to protect special characters
-      RPROMPT_PREFIX='%{'$'\e[1A''%}' # one line up
-      RPROMPT_SUFFIX='%{'$'\e[1B''%}' # one line down
-    else
-      RPROMPT_PREFIX=''
-      RPROMPT_SUFFIX=''
-    fi
-  else
-    PROMPT='%f%b%k$(build_left_prompt)'
-    RPROMPT_PREFIX=''
-    RPROMPT_SUFFIX=''
+  # Ensure that every time the user wants a new prompt,
+  # he gets a new, fresh one.
+  p9k_clear_cache
+
+  # Initialize icon overrides
+  _powerlevel9kInitializeIconOverrides
+
+  # Precompile the Segment Separators here!
+  _POWERLEVEL9K_LEFT_SEGMENT_SEPARATOR="$(print_icon 'LEFT_SEGMENT_SEPARATOR')"
+  _POWERLEVEL9K_LEFT_SUBSEGMENT_SEPARATOR="$(print_icon 'LEFT_SUBSEGMENT_SEPARATOR')"
+  _POWERLEVEL9K_LEFT_SEGMENT_END_SEPARATOR="$(print_icon 'LEFT_SEGMENT_END_SEPARATOR')"
+  _POWERLEVEL9K_RIGHT_SEGMENT_SEPARATOR="$(print_icon 'RIGHT_SEGMENT_SEPARATOR')"
+  _POWERLEVEL9K_RIGHT_SUBSEGMENT_SEPARATOR="$(print_icon 'RIGHT_SUBSEGMENT_SEPARATOR')"
+
+  build_left_prompt
+  if [[ "${POWERLEVEL9K_DISABLE_RPROMPT}" != "true" ]]; then
+    build_right_prompt
   fi
 
-  if [[ "$POWERLEVEL9K_DISABLE_RPROMPT" != true ]]; then
-    RPROMPT='$RPROMPT_PREFIX%f%b%k$(build_right_prompt)%{$reset_color%}$RPROMPT_SUFFIX'
+  ASYNC_PROC=$!
+}
+
+function rebuild_vi_mode {
+  if (( ${+terminfo[smkx]} )); then
+    printf '%s' ${terminfo[smkx]}
   fi
-NEWLINE='
-'
-  [[ $POWERLEVEL9K_PROMPT_ADD_NEWLINE == true ]] && PROMPT="$NEWLINE$PROMPT"
+  for index in $(get_indices_of_segment "vi_mode" "${POWERLEVEL9K_LEFT_PROMPT_ELEMENTS}"); do
+     prompt_vi_mode "left" "${index}" "${1}" &!
+  done
+  for index in $(get_indices_of_segment "vi_mode" "${POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS}"); do
+     prompt_vi_mode "right" "${index}" "${1}" &!
+  done
+}
+
+function zle-line-init {
+  rebuild_vi_mode "${KEYMAP}"
+}
+
+function zle-line-finish {
+  rebuild_vi_mode "${KEYMAP}"
+}
+
+function zle-keymap-select {
+  rebuild_vi_mode "${KEYMAP}"
 }
 
 prompt_powerlevel9k_setup() {
@@ -1350,15 +1806,42 @@ prompt_powerlevel9k_setup() {
   # Disable false display of command execution time
   _P9K_TIMER_START=0x7FFFFFFF
 
+  ################################################################
+  # Set required ZSH options
+  ################################################################
+  # See http://zsh.sourceforge.net/Doc/Release/Options.html
+
+  # Fix for Prezto/ZIM. We need to make our traps global, so that
+  # they are still active when Prezto/ZIM finally execute the theme.
+  setopt nolocaltraps
+
+  # Do not use local options. We need this, because "prompt_opts"
+  # below is a global variable that is used by ZSHs promptinit function.
+  unsetopt LOCAL_OPTIONS
+
   # The prompt function will set these prompt_* options after the setup function
   # returns. We need prompt_subst so we can safely run commands in the prompt
   # without them being double expanded and we need prompt_percent to expand the
   # common percent escape sequences.
+
+  # See https://github.com/zsh-users/zsh/blob/14487ff5cc0233acf4ed3398559d975e92d52d51/Functions/Prompts/promptinit#L171-L180
+  # See http://zsh.sourceforge.net/Doc/Release/Prompt-Expansion.html
   prompt_opts=(subst percent cr)
+
+  # Disable KSH style arrays.
+  unsetopt KSH_ARRAYS
+
+  # We make heavy use of multibyte characters
+  setopt MULTIBYTE
 
   # Borrowed from promptinit, sets the prompt options in case the theme was
   # not initialized via promptinit.
   setopt noprompt{bang,cr,percent,subst} "prompt${^prompt_opts[@]}"
+
+  ################################################################
+  # Print warning messages if there is something wrong with the
+  # users configuration.
+  ################################################################
 
   # Display a warning if the terminal does not support 256 colors
   local term_colors
@@ -1380,23 +1863,33 @@ prompt_powerlevel9k_setup() {
       print -P "\t%F{red}WARNING!%f %F{blue}export LANG=\"en_US.UTF-8\"%f at the top of your \~\/.zshrc is sufficient."
   fi
 
+  ################################################################
+  # Set default elements
+  ################################################################
+
   defined POWERLEVEL9K_LEFT_PROMPT_ELEMENTS || POWERLEVEL9K_LEFT_PROMPT_ELEMENTS=(context dir rbenv vcs)
   defined POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS || POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(status root_indicator background_jobs history time)
+
+  ################################################################
+  # Show a warning message if the users uses deprecated segments
+  ################################################################
 
   # Display a warning if deprecated segments are in use.
   typeset -AH deprecated_segments
   # old => new
   deprecated_segments=(
-    'longstatus'      'status'
+    'longstatus'        'status'
+    'symfony2_version'  'symfony_version'
+    'symfony2_tests'    'symfony_tests'
   )
   print_deprecation_warning deprecated_segments
 
+  ################################################################
+  # Autoload functions we rely on
+  ################################################################
+
   # initialize colors
   autoload -U colors && colors
-
-  if segment_in_use "vcs"; then
-    powerlevel9k_vcs_init
-  fi
 
   # initialize timing functions
   zmodload zsh/datetime
@@ -1407,9 +1900,20 @@ prompt_powerlevel9k_setup() {
   # initialize hooks
   autoload -Uz add-zsh-hook
 
+  ################################################################
+  # Set ZSH hooks
+  ################################################################
+
   # prepare prompts
   add-zsh-hook precmd powerlevel9k_prepare_prompts
   add-zsh-hook preexec powerlevel9k_preexec
+
+  zle -N zle-line-init
+  zle -N zle-line-finish
+  zle -N zle-keymap-select
 }
 
 prompt_powerlevel9k_setup "$@"
+
+# Show all active traps
+# trap --

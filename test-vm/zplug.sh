@@ -1,6 +1,6 @@
 #!/usr/bin/zsh
 # We need to run this script in ZSH, so that switching user works!
-NEW_USER=vagrant-omz
+NEW_USER=vagrant-zplug
 # Create User
 PASSWORD='$6$OgLg9v2Z$Db38Jr9inZG7y8BzL8kqFK23fF5jZ7FU1oiIBLFjNYR9XVX03fwQayMgA6Rm1rzLbXaf.gkZaTWhB9pv5XLq11'
 useradd -p $PASSWORD -g vagrant -s $(which zsh) -m $NEW_USER
@@ -13,24 +13,17 @@ chmod 440 /etc/sudoers.d/$NEW_USER
         #UID=$(id -u $NEW_USER)
         #EUID=$(id -u $NEW_USER)
         HOME=/home/$NEW_USER
-	SHELL=$(which zsh)
 
-        sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
-
-        mkdir -p ~/.oh-my-zsh/custom/themes
-        ln -s /vagrant_data ~/.oh-my-zsh/custom/themes/powerlevel9k
-
-        echo '
-print -P "%F{blue}INFO:%f Set your configuration in powerlevel9k.config in your powerlevel9k root folder for easier testing."
+        echo "
+print -P '%F{blue}INFO:%f Set your configuration in powerlevel9k.config in your powerlevel9k root folder for easier testing.'
 source /vagrant_data/powerlevel9k.config &>/dev/null
 
-export ZSH=$HOME/.oh-my-zsh
-ZSH_THEME="powerlevel9k/powerlevel9k"
-plugins=(git rake ruby)
+source ~/.zplug/init.zsh\n
+zplug \"/vagrant_data\", use:\"powerlevel9k.zsh-theme\", from:local, as:theme\n
+zplug load --verbose\n
+" > ~/.zshrc
 
-source $ZSH/oh-my-zsh.sh
-' > $HOME/.zshrc
-
-        # setup environment
-        /vagrant_data/test-vm-providers/setup-environment.sh
+        # install zplug
+        curl -sL zplug.sh/installer | zsh
+        #git clone https://github.com/zplug/zplug "${HOME}/.zplug"
 )

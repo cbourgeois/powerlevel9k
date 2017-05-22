@@ -2,6 +2,39 @@
 
 - Significant enhancements to the `battery` segment. Check out the README to
   read more!
+## async-next
+
+### All segments are now async
+
+All segments are now generated asynchronously which brings a huge
+performance benefit.
+
+### Easier manual testing
+
+There are plenty of ZSH frameworks / plugin managers out there.
+We included them in a virtual machine, so that you can easily
+test your configuration.
+
+### Improved stability
+
+We added a lot of unit tests to maintain stability.
+
+### `vi_mode` works again
+
+The segment now works again.
+
+### `virtualenv` changes
+
+Dropped support for `VIRTUAL_ENV_DISABLE_PROMPT`. If you want
+to disable the segment, just remove it from your configuration.
+
+### `custom` changes
+
+Custom segments now can have a visual identifier. Just set 
+`POWERLEVEL9K_CUSTOM_<SEGMENT_NAME>_ICON="myIcon"`. Also, 
+you can override the color of the visual identifier by 
+setting `POWERLEVEL9K_CUSTOM_<SEGMENT_NAME>_VISUAL_IDENTIFIER_COLOR="red"`.
+>>>>>>> async/async_all_the_segments
 
 ## v0.6.3
 
@@ -185,7 +218,6 @@ anaconda environment.
 ## New segment `pyenv` added
 
 This segment shows your active python version as reported by `pyenv`.
-
 
 ## v0.3.2
 
